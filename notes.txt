@@ -1,0 +1,302 @@
+config
+KEYVAULT_NAME="my-bootstrap-kv"
+RESOURCE_GROUP="bootstrap-keyvault-rg"
+LOCATION="uksouth"
+MY_USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+
+az group create \
+  --name "$RESOURCE_GROUP" \
+  --location "$LOCATION"
+
+  az keyvault create \
+  --name "$KEYVAULT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --location "$LOCATION" \
+  --enable-rbac-authorization true \
+  --sku standard
+
+  KEYVAULT_ID=$(az keyvault show --name "$KEYVAULT_NAME" --resource-group "$RESOURCE_GROUP" --query id -o tsv)
+
+az role assignment create \
+  --role "Key Vault Administrator" \
+  --assignee-object-id "$MY_USER_OBJECT_ID" \
+  --assignee-principal-type User \
+  --scope "$KEYVAULT_ID"
+
+  az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-license" \
+  --value "password"
+
+  az keyvault secret show \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-license" \
+  --query id -o tsv
+
+  az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-encryption-password" \
+  --value "password"
+
+  az keyvault secret show \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-encryption-password" \
+  --query id -o tsv
+
+  ==========
+
+  Certificate
+
+  # Set your FQDN
+FQDN="tfe.azure.wind.com"
+
+# Generate a private key (no password — required by the README)
+openssl genrsa -out privkey.pem 4096
+
+# Generate a self-signed certificate valid for 1 year
+openssl req -new -x509 \
+  -key privkey.pem \
+  -out cert.pem \
+  -days 365 \
+  -subj "/CN=${FQDN}" \
+  -addext "subjectAltName=DNS:${FQDN}"
+
+# The CA bundle for a self-signed cert is the cert itself
+cp cert.pem ca_bundle.pem
+
+cat cert.pem    | base64 > cert.b64
+cat privkey.pem | base64 > privkey.b64
+cat ca_bundle.pem | base64 > ca_bundle.b64
+
+tr -d '\n' < cert.b64 > cert_nowrap.b64
+tr -d '\n' < privkey.b64 > privkey_nowrap.b64
+tr -d '\n' < ca_bundle.b64 > ca_bundle_nowrap.b64
+
+az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-tls-cert" \
+  --file cert_nowrap.b64
+
+  az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-tls-privkey" \
+  --file privkey_nowrap.b64
+
+# CA bundle
+az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-tls-ca-bundle" \
+  --file ca_bundle_nowrap.b64
+
+=========
+NetworkingRG="tfe-networking-rg"
+LOCATION="uksouth"
+VNET="tfe-vnet"
+
+# Resource group
+az group create --name "tfe-networking-rg" --location "uksouth"
+
+# VNet
+az network vnet create \
+  --name "$VNET" \
+  --resource-group "$RG" \
+  --location "$LOCATION" \
+  --address-prefixes "10.0.0.0/16"
+
+# Load balancer subnet
+az network vnet subnet create \
+  --name "tfe-lb-subnet" \
+  --resource-group "$RG" \
+  --vnet-name "$VNET" \
+  --address-prefixes "10.0.1.0/24"
+
+# VM subnet (with required service endpoints)
+az network vnet subnet create \
+  --name "tfe-vm-subnet" \
+  --resource-group "$RG" \
+  --vnet-name "$VNET" \
+  --address-prefixes "10.0.2.0/24" \
+  --service-endpoints Microsoft.KeyVault Microsoft.Sql Microsoft.Storage
+
+# Database subnet (with PostgreSQL delegation)
+az network vnet subnet create \
+  --name "tfe-db-subnet" \
+  --resource-group "$RG" \
+  --vnet-name "$VNET" \
+  --address-prefixes "10.0.3.0/24" \
+  --delegations Microsoft.DBforPostgreSQL/flexibleServers
+
+# Redis subnet
+az network vnet subnet create \
+  --name "tfe-redis-subnet" \
+  --resource-group "$RG" \
+  --vnet-name "$VNET" \
+  --address-prefixes "10.0.4.0/24"
+
+# Print all the IDs you need for tfvars
+echo "vnet_id:"
+az network vnet show --name "$VNET" --resource-group "$RG" --query id -o tsv
+
+echo "lb_subnet_id:"
+az network vnet subnet show --name "tfe-lb-subnet" --resource-group "$RG" --vnet-name "$VNET" --query id -o tsv
+
+echo "vm_subnet_id:"
+az network vnet subnet show --name "tfe-vm-subnet" --resource-group "$RG" --vnet-name "$VNET" --query id -o tsv
+
+echo "db_subnet_id:"
+az network vnet subnet show --name "tfe-db-subnet" --resource-group "$RG" --vnet-name "$VNET" --query id -o tsv
+
+echo "redis_subnet_id:"
+az network vnet subnet show --name "tfe-redis-subnet" --resource-group "$RG" --vnet-name "$VNET" --query id -o tsv
+
+# Get the public IP after apply
+az network public-ip show \
+  --name "test-sandbox-tfe-lb-ip" \
+  --resource-group "tfe-rg" \
+  --query ipAddress -o tsv
+
+Then add a local /etc/hosts entry to resolve your tfe_fqdn to that IP:
+
+echo "<public-ip>  tfe.azure.example.com" | sudo tee -a /etc/hosts
+
+
+============
+
+Get local ip: curl -s https://ifconfig.me
+Add to storage_account_ip_allow
+
+============
+ssh
+cat ~/.ssh/id_ed25519.pub
+# or
+cat ~/.ssh/id_rsa.pub
+
+Amend: vm_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... tfe-azure-sandbox"
+
+
+============
+
+database
+# Generate a random password (no $ character — PostgreSQL doesn't allow it)
+DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=$')
+
+# Store it in Key Vault
+az keyvault secret set \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-database-password" \
+  --value "$DB_PASSWORD"
+
+# Print the password so you can save it somewhere safe
+echo "DB Password: $DB_PASSWORD"
+
+az keyvault secret show \
+  --vault-name "$KEYVAULT_NAME" \
+  --name "tfe-database-password" \
+  --query "{name:name, id:id}" -o table
+
+
+===============
+
+Log analytics Workspace
+
+az group create \
+  --name "tfe-log-analytics-rg" \
+  --location "uksouth"
+
+az monitor log-analytics workspace create \
+  --name "tfeloganalyticsworkspacename" \
+  --resource-group "tfe-log-analytics-rg" \
+  --location "uksouth"
+
+
+  =========
+  After deployment:
+
+  az network public-ip show \
+  --name "em-tfe-lb-ip" \
+  --resource-group "tfe-rg" \
+  --query ipAddress -o tsv
+  
+az vmss nic list \
+  --resource-group "tfe-rg" \
+  --vmss-name "em-tfe-vmss" \
+  --query "[0].ipConfigurations[0].privateIPAddress" -o tsv
+
+
+  our user doesn't have the runCommand permission on the VMSS. You need to assign yourself the Virtual Machine Contributor role on the resource group. Run this from your local terminal (not Cloud Shell, since Cloud Shell is using the restricted identity):
+
+# Get your object ID
+MY_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+
+# Assign Virtual Machine Contributor on the tfe-rg resource group
+az role assignment create \
+  --role "Virtual Machine Contributor" \
+  --assignee-object-id "$MY_OBJECT_ID" \
+  --assignee-principal-type User \
+  --scope "/subscriptions/338f0fa5-b5ae-4847-9821-1808613db6c5/resourceGroups/tfe-rg"
+
+  Reset tfeadmin
+  az vmss update-instances \
+  --resource-group "tfe-rg" \
+  --name "em-tfe-vmss" \
+  --instance-ids 0
+
+az vmss run-command invoke \
+  --resource-group "tfe-rg" \
+  --name "em-tfe-vmss" \
+  --instance-id 0 \
+  --command-id RunShellScript \
+  --scripts "echo 'tfeadmin:MyTempPassword123!' | chpasswd"
+
+=============
+
+Create a bastion host
+1. Create subnet
+az network vnet subnet create \
+  --name "AzureBastionSubnet" \
+  --resource-group "tfe-networking-rg" \
+  --vnet-name "tfe-vnet" \
+  --address-prefixes "10.0.5.0/26"
+
+2. Creat public IP
+az network public-ip create \
+  --name "tfe-bastion-ip" \
+  --resource-group "tfe-networking-rg" \
+  --location "uksouth" \
+  --sku Standard \
+  --allocation-method Static \
+  --zone 1 2 3
+
+3. Create the bastion host
+az network bastion create \
+  --name "tfe-bastion" \
+  --resource-group "tfe-networking-rg" \
+  --location "uksouth" \
+  --vnet-name "tfe-vnet" \
+  --public-ip-address "tfe-bastion-ip" \
+  --sku Basic
+
+4. Wait for it to be ready - should say succeeded
+az network bastion show \
+  --name "tfe-bastion" \
+  --resource-group "tfe-networking-rg" \
+  --query "provisioningState" -o tsv
+
+5. Delete when done
+az network bastion delete \
+  --name "tfe-bastion" \
+  --resource-group "tfe-networking-rg"
+
+  =========
+
+  Disable autorepir on VM
+  GUI - go to vmss -> operations -> health and repair -> automatic instance repair - disable
+
+  ==============
+
+  Run cloud init script from vm
+  cd /var/lib/cloud/instance/scripts/part-001
+
+  ==========
+
+  DNS
