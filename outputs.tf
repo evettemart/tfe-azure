@@ -2,6 +2,22 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
+# Windows bastion
+#------------------------------------------------------------------------------
+output "windows_bastion_public_ip" {
+  value       = var.create_windows_bastion ? azurerm_public_ip.windows_bastion[0].ip_address : null
+  description = "Public IP address of the Windows bastion VM. Use this to open an RDP session from your Mac."
+}
+
+#------------------------------------------------------------------------------
+# DNS
+#------------------------------------------------------------------------------
+output "public_dns_zone_name_servers" {
+  value       = var.create_public_dns_zone ? azurerm_dns_zone.tfe[0].name_servers : null
+  description = "List of authoritative name servers for the created public DNS zone. Delegate your domain to these name servers. Only populated when `create_public_dns_zone` is `true`."
+}
+
+#------------------------------------------------------------------------------
 # TFE
 #------------------------------------------------------------------------------
 output "url" {

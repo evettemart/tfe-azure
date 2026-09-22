@@ -2,10 +2,25 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
-# DNS zone lookup
+# Public DNS zone (optional creation)
+#------------------------------------------------------------------------------
+resource "azurerm_dns_zone" "tfe" {
+  count = var.create_public_dns_zone && var.public_dns_zone_name != null ? 1 : 0
+
+  name                = var.public_dns_zone_name
+  resource_group_name = local.resource_group_name
+
+  tags = merge(
+    { "Name" = var.public_dns_zone_name },
+    var.common_tags
+  )
+}
+
+#------------------------------------------------------------------------------
+# DNS zone lookup (existing zones)
 #------------------------------------------------------------------------------
 data "azurerm_dns_zone" "tfe" {
-  count = var.create_tfe_public_dns_record && var.public_dns_zone_name != null ? 1 : 0
+  count = var.create_tfe_public_dns_record && !var.create_public_dns_zone && var.public_dns_zone_name != null ? 1 : 0
 
   name                = var.public_dns_zone_name
   resource_group_name = var.public_dns_zone_rg_name
@@ -22,16 +37,33 @@ data "azurerm_private_dns_zone" "tfe" {
 # DNS A record
 #------------------------------------------------------------------------------
 locals {
-  tfe_hostname_public  = var.create_tfe_public_dns_record && var.public_dns_zone_name != null ? trimsuffix(substr(var.tfe_fqdn, 0, length(var.tfe_fqdn) - length(var.public_dns_zone_name) - 1), ".") : var.tfe_fqdn
+  # Resolve which public zone object to use: created zone takes priority over looked-up zone.
+  public_dns_zone_name_resolved = (
+    var.create_public_dns_zone && var.public_dns_zone_name != null
+    ? azurerm_dns_zone.tfe[0].name
+    : (var.create_tfe_public_dns_record && var.public_dns_zone_name != null ? data.azurerm_dns_zone.tfe[0].name : null)
+  )
+  public_dns_zone_rg_resolved = (
+    var.create_public_dns_zone && var.public_dns_zone_name != null
+    ? local.resource_group_name
+    : var.public_dns_zone_rg_name
+  )
+
+  # Derive the relative hostname (record name) from the FQDN by stripping the zone suffix.
+  tfe_hostname_public = (
+    local.public_dns_zone_name_resolved != null
+    ? trimsuffix(substr(var.tfe_fqdn, 0, length(var.tfe_fqdn) - length(local.public_dns_zone_name_resolved) - 1), ".")
+    : var.tfe_fqdn
+  )
   tfe_hostname_private = var.create_tfe_private_dns_record && var.private_dns_zone_name != null ? trim(split(var.private_dns_zone_name, var.tfe_fqdn)[0], ".") : var.tfe_fqdn
 }
 
 resource "azurerm_dns_a_record" "tfe" {
-  count = var.create_tfe_public_dns_record && var.public_dns_zone_name != null && var.create_lb ? 1 : 0
+  count = (var.create_public_dns_zone || (var.create_tfe_public_dns_record && !var.create_public_dns_zone)) && var.public_dns_zone_name != null && var.create_lb ? 1 : 0
 
   name                = local.tfe_hostname_public
-  resource_group_name = var.public_dns_zone_rg_name
-  zone_name           = data.azurerm_dns_zone.tfe[0].name
+  resource_group_name = local.public_dns_zone_rg_resolved
+  zone_name           = local.public_dns_zone_name_resolved
   ttl                 = 300
   records             = var.lb_is_internal ? [azurerm_lb.tfe[0].private_ip_address] : null
   target_resource_id  = !var.lb_is_internal ? azurerm_public_ip.tfe_lb[0].id : null

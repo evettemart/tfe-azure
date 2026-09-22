@@ -152,6 +152,40 @@ One of the following logging destinations for the TFE container logs:
 
 1. Follow the steps to [create the TFE initial admin user](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/initial-admin-user).
 
+## First-time login
+
+TFE has no default credentials. On first install you must create the initial admin account using a one-time IACT (Initial Admin Creation Token).
+
+**Step 1 — Get the IACT token (run on your Mac with the bastion tunnel open):**
+
+```bash
+ssh -p 2222 -i "$SSH_KEY" tfeadmin@127.0.0.1 \
+  "sudo docker exec tfe-tfe-1 tfectl admin token"
+```
+
+The token is valid for 60 minutes. If it has expired, reset it:
+
+```bash
+ssh -p 2222 -i "$SSH_KEY" tfeadmin@127.0.0.1 \
+  "sudo docker exec tfe-tfe-1 tfectl admin token --reset"
+```
+
+**Step 2 — Create the admin account:**
+
+Open Chrome on the Windows bastion and navigate to:
+
+```
+https://tfe.azure.example.com/admin/account/new?token=<PASTE-TOKEN-HERE>
+```
+
+Fill in your chosen username, email, and password — this becomes the first admin account.
+
+**Step 3 — Log in:**
+
+Go to `https://tfe.azure.example.com` and log in with the credentials you just created.
+
+> 📝 Note: `tfe_iact_time_limit` in `terraform.tfvars` controls how long the token is valid (default 60 minutes). `tfe_iact_subnets` can be set to restrict which subnets are allowed to use the token.
+
 >📝 Note: This module automatically switches between `/_health_check` and `/api/v1/health/readiness` based on `tfe_image_tag` so the Azure load balancer probe and bootstrap polling stay aligned with the deployed TFE version.
 
 ## Docs
@@ -163,6 +197,66 @@ Below are links to various docs related to the customization and management of y
 - [TFE TLS Certificate Rotation](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-cert-rotation.md)
 - [TFE Configuration Settings](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-config-settings.md)
 - [Azure GovCloud Deployment](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/govcloud-deployment.md)
+
+## Windows Bastion
+
+A Windows Server 2025 VM with Google Chrome pre-installed can be optionally deployed to access the TFE UI from a browser. Enable it by setting `create_windows_bastion = true` in `terraform.tfvars`.
+
+### Connecting from your Mac
+
+- Get the public IP: `terraform -chdir=main output windows_bastion_public_ip`
+- Install **Microsoft Remote Desktop** from the Mac App Store (free) if not already installed
+- Open the app → **Add PC** → enter the IP address
+- Set username `bastionadmin` (or your `windows_bastion_admin_username`) and the password you supplied via `TF_VAR_windows_bastion_admin_password`
+- Accept the certificate warning → you are on the Windows desktop
+
+### Accessing TFE from the Windows bastion
+
+Once connected via RDP, open PowerShell and follow these steps:
+
+**1. Get the TFE VM private IP (run on your Mac):**
+```bash
+az vmss nic list \
+  --resource-group tfe-rg \
+  --vmss-name em-tfe-vmss \
+  --query "[].ipConfigurations[0].privateIPAddress" \
+  --output tsv
+```
+
+> Note: the Windows bastion may be assigned the same IP as the TFE VM if both are on the VM subnet. Always look up the TFE VM IP from Azure rather than assuming.
+
+**2. Test the connection (run in Windows PowerShell):**
+```powershell
+Test-NetConnection -ComputerName <TFE-VM-IP> -Port 443
+```
+`TcpTestSucceeded : True` means TFE is reachable.
+
+**3. Add the TFE hostname to the Windows hosts file (run in Windows PowerShell):**
+```powershell
+# Remove any existing entry for tfe.azure.example.com
+$hosts = Get-Content C:\Windows\System32\drivers\etc\hosts
+$hosts = $hosts | Where-Object { $_ -notmatch "tfe.azure.example.com" }
+$hosts | Set-Content C:\Windows\System32\drivers\etc\hosts
+
+# Add the correct entry
+Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "`n<TFE-VM-IP> tfe.azure.example.com"
+
+# Verify
+Get-Content C:\Windows\System32\drivers\etc\hosts | Select-String "tfe"
+```
+
+**4. Open Chrome:**
+```powershell
+Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" "https://tfe.azure.example.com"
+```
+
+If Chrome is not yet installed:
+```powershell
+$i = "$env:TEMP\chrome.exe"
+Invoke-WebRequest "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile $i
+Start-Process $i -Args "/silent /install" -Wait
+Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" "https://tfe.azure.example.com"
+```
 
 ## Module support
 
