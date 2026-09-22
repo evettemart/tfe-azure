@@ -117,7 +117,9 @@ resource "azurerm_bastion_host" "tfe" {
   name                = "tfe-bastion"
   resource_group_name = azurerm_resource_group.networking[0].name
   location            = var.location
-  sku                 = "Basic"
+  sku                    = "Standard"
+  tunneling_enabled      = true
+  ip_connect_enabled     = true
 
   ip_configuration {
     name                 = "bastion_ip_config"

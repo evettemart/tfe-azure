@@ -481,32 +481,28 @@ variable "secondary_vm_subnet_id" {
 #------------------------------------------------------------------------------
 # DNS
 #------------------------------------------------------------------------------
+variable "create_public_dns_zone" {
+  type        = bool
+  description = "Boolean to create a new public Azure DNS zone for TFE."
+  default     = false
+}
+
 variable "create_tfe_public_dns_record" {
   type        = bool
-  description = "Boolean to create a DNS record for TFE in a public Azure DNS zone. A `public_dns_zone_name` must also be provided when `true`."
+  description = "Boolean to create a DNS record for TFE in an existing public Azure DNS zone."
   default     = false
 }
 
 variable "public_dns_zone_name" {
   type        = string
-  description = "Name of existing public Azure DNS zone to create DNS record in. Required when `create_tfe_public_dns_record` is `true`."
+  description = "Name of the public Azure DNS zone. Created when `create_public_dns_zone` is `true`; must already exist when `create_tfe_public_dns_record` is `true`."
   default     = null
-
-  validation {
-    condition     = var.create_tfe_public_dns_record ? var.public_dns_zone_name != null : true
-    error_message = "A value is required when `create_tfe_public_dns_record` is `true`."
-  }
 }
 
 variable "public_dns_zone_rg_name" {
   type        = string
-  description = "Name of Resource Group where `public_dns_zone_name` resides. Required when `public_dns_zone_name` is not `null`."
+  description = "Resource Group where the existing public DNS zone resides. Required when `create_tfe_public_dns_record` is `true` and `create_public_dns_zone` is `false`."
   default     = null
-
-  validation {
-    condition     = var.public_dns_zone_name != null ? var.public_dns_zone_rg_name != null : true
-    error_message = "A value is required when `public_dns_zone_name` is not `null`."
-  }
 }
 
 variable "create_tfe_private_dns_record" {
@@ -1012,4 +1008,38 @@ variable "custom_fluent_bit_config" {
   type        = string
   description = "Custom Fluent Bit configuration for log forwarding. Only valid if `log_fwd_destination_type` is `custom`."
   default     = null
+}
+
+#------------------------------------------------------------------------------
+# Windows bastion host
+#------------------------------------------------------------------------------
+variable "create_windows_bastion" {
+  type        = bool
+  description = "Boolean to create a Windows Server 2025 bastion VM with a public IP and Google Chrome pre-installed."
+  default     = false
+}
+
+variable "windows_bastion_vm_size" {
+  type        = string
+  description = "Azure VM size (SKU) for the Windows bastion host."
+  default     = "Standard_D2s_v3"
+}
+
+variable "windows_bastion_admin_username" {
+  type        = string
+  description = "Local administrator username for the Windows bastion VM."
+  default     = "bastionadmin"
+}
+
+variable "windows_bastion_admin_password" {
+  type        = string
+  description = "Local administrator password for the Windows bastion VM."
+  sensitive   = true
+  default     = null
+}
+
+variable "windows_bastion_allowed_cidrs" {
+  type        = list(string)
+  description = "List of CIDR ranges allowed RDP access (port 3389) to the Windows bastion VM."
+  default     = []
 }

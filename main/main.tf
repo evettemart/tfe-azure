@@ -79,19 +79,30 @@ module "tfe" {
   redis_subnet_id                = var.redis_subnet_id
 
   # --- DNS (optional) --- #
+  create_public_dns_zone        = var.create_public_dns_zone
+  public_dns_zone_name          = var.public_dns_zone_name
+  public_dns_zone_rg_name       = var.public_dns_zone_rg_name
+  create_tfe_public_dns_record  = var.create_tfe_public_dns_record
   create_tfe_private_dns_record = var.create_tfe_private_dns_record
   private_dns_zone_name         = var.private_dns_zone_name
   private_dns_zone_rg_name      = var.private_dns_zone_rg_name
 
+  # --- Windows bastion (optional) --- #
+  create_windows_bastion         = var.create_windows_bastion
+  windows_bastion_vm_size        = var.windows_bastion_vm_size
+  windows_bastion_admin_username = var.windows_bastion_admin_username
+  windows_bastion_admin_password = var.windows_bastion_admin_password
+  windows_bastion_allowed_cidrs  = var.windows_bastion_allowed_cidrs
+
   image_factory_subscription_id = var.image_factory_subscription_id
 
   # --- Compute --- #
-  vmss_instance_count = var.vmss_instance_count
-  vm_ssh_public_key   = var.vm_ssh_public_key
-  vm_os_image         = var.vm_os_image
-  vm_sku              = var.vm_sku
-  container_runtime   = var.container_runtime
-  docker_version      = var.docker_version
+  vmss_instance_count            = var.vmss_instance_count
+  vm_ssh_public_key              = var.vm_ssh_public_key
+  vm_os_image                    = var.vm_os_image
+  vm_sku                         = var.vm_sku
+  container_runtime              = var.container_runtime
+  docker_version                 = var.docker_version
   vm_admin_username              = var.vm_admin_username
   vm_enable_boot_diagnostics     = var.vm_enable_boot_diagnostics
   vm_enable_auto_instance_repair = var.vm_enable_auto_instance_repair

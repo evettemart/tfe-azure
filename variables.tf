@@ -397,31 +397,52 @@ variable "secondary_vm_subnet_id" {
 #------------------------------------------------------------------------------
 # DNS
 #------------------------------------------------------------------------------
+variable "create_public_dns_zone" {
+  type        = bool
+  description = "Boolean to create a new public Azure DNS zone for TFE. When `true`, a new `azurerm_dns_zone` is created using `public_dns_zone_name` in the TFE resource group, and a DNS A record is automatically added that resolves `tfe_fqdn` to the load balancer public IP. Requires `lb_is_internal` to be `false` and `create_lb` to be `true`."
+  default     = false
+
+  validation {
+    condition     = var.create_public_dns_zone ? !var.lb_is_internal : true
+    error_message = "Value must be `false` when `lb_is_internal` is `true` — a public DNS zone requires a public load balancer IP."
+  }
+
+  validation {
+    condition     = var.create_public_dns_zone ? var.create_lb : true
+    error_message = "Value must be `false` when `create_lb` is `false` — a public DNS zone requires a load balancer to exist."
+  }
+}
+
 variable "create_tfe_public_dns_record" {
   type        = bool
-  description = "Boolean to create a DNS record for TFE in a public Azure DNS zone. A `public_dns_zone_name` must also be provided when `true`."
+  description = "Boolean to create a DNS record for TFE in a public Azure DNS zone. A `public_dns_zone_name` must also be provided when `true`. Set this when using an *existing* public DNS zone; use `create_public_dns_zone` instead to have Terraform create a new zone."
   default     = false
 }
 
 variable "public_dns_zone_name" {
   type        = string
-  description = "Name of existing public Azure DNS zone to create DNS record in. Required when `create_tfe_public_dns_record` is `true`."
+  description = "Name of the public Azure DNS zone. When `create_public_dns_zone` is `true` this zone is created; when `create_tfe_public_dns_record` is `true` this must be an existing zone. Required when either flag is `true`."
   default     = null
 
   validation {
     condition     = var.create_tfe_public_dns_record ? var.public_dns_zone_name != null : true
     error_message = "A value is required when `create_tfe_public_dns_record` is `true`."
   }
+
+  validation {
+    condition     = var.create_public_dns_zone ? var.public_dns_zone_name != null : true
+    error_message = "A value is required when `create_public_dns_zone` is `true`."
+  }
 }
 
 variable "public_dns_zone_rg_name" {
   type        = string
-  description = "Name of Resource Group where `public_dns_zone_name` resides. Required when `public_dns_zone_name` is not `null`."
+  description = "Name of Resource Group where `public_dns_zone_name` resides. Required when `create_tfe_public_dns_record` is `true` (existing zone lookup). When `create_public_dns_zone` is `true` the zone is created in the TFE resource group and this variable is ignored."
   default     = null
 
   validation {
-    condition     = var.public_dns_zone_name != null ? var.public_dns_zone_rg_name != null : true
-    error_message = "A value is required when `public_dns_zone_name` is not `null`."
+    condition     = var.create_tfe_public_dns_record && !var.create_public_dns_zone ? var.public_dns_zone_rg_name != null : true
+    error_message = "A value is required when `create_tfe_public_dns_record` is `true` and `create_public_dns_zone` is `false`."
   }
 }
 
@@ -991,3 +1012,50 @@ variable "create_log_analytics_workspace" {
   default     = false
 }
 
+
+#------------------------------------------------------------------------------
+# Windows bastion host
+#------------------------------------------------------------------------------
+variable "create_windows_bastion" {
+  type        = bool
+  description = "Boolean to create a Windows Server 2025 bastion VM with a public IP and Google Chrome pre-installed. Useful for accessing the TFE UI from a browser when the load balancer has no public DNS or when running in a restricted network."
+  default     = false
+}
+
+variable "windows_bastion_vm_size" {
+  type        = string
+  description = "Azure VM size (SKU) for the Windows bastion host."
+  default     = "Standard_D2s_v3"
+}
+
+variable "windows_bastion_admin_username" {
+  type        = string
+  description = "Local administrator username for the Windows bastion VM."
+  default     = "bastionadmin"
+}
+
+variable "windows_bastion_admin_password" {
+  type        = string
+  description = "Local administrator password for the Windows bastion VM. Must meet Azure complexity requirements (12+ chars, upper, lower, digit, special). Recommended: supply via the TF_VAR_windows_bastion_admin_password environment variable rather than in tfvars."
+  sensitive   = true
+  default     = null
+  nullable    = true
+}
+
+variable "windows_bastion_allowed_cidrs" {
+  type        = list(string)
+  description = "List of CIDR ranges allowed to connect to the Windows bastion host over RDP (port 3389). Set this to your Mac's public IP, e.g. [\"1.2.3.4/32\"]."
+  default     = []
+
+  validation {
+    condition     = var.create_windows_bastion ? length(var.windows_bastion_allowed_cidrs) > 0 : true
+    error_message = "At least one CIDR must be provided in `windows_bastion_allowed_cidrs` when `create_windows_bastion` is `true`."
+  }
+
+  validation {
+    condition = alltrue([
+      for cidr in var.windows_bastion_allowed_cidrs : can(cidrhost(cidr, 0))
+    ])
+    error_message = "All values must be valid CIDR notation."
+  }
+}

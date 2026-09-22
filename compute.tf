@@ -17,16 +17,16 @@ locals {
   // Resolve workspace_id and access_key from either the managed resource or the data source
   log_analytics_workspace_id = (
     var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
-      (var.create_log_analytics_workspace ?
-        azurerm_log_analytics_workspace.tfe[0].workspace_id :
-        data.azurerm_log_analytics_workspace.logging[0].workspace_id)
+    (var.create_log_analytics_workspace ?
+      azurerm_log_analytics_workspace.tfe[0].workspace_id :
+    data.azurerm_log_analytics_workspace.logging[0].workspace_id)
     : null
   )
   log_analytics_access_key = (
     var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
-      (var.create_log_analytics_workspace ?
-        azurerm_log_analytics_workspace.tfe[0].primary_shared_key :
-        data.azurerm_log_analytics_workspace.logging[0].primary_shared_key)
+    (var.create_log_analytics_workspace ?
+      azurerm_log_analytics_workspace.tfe[0].primary_shared_key :
+    data.azurerm_log_analytics_workspace.logging[0].primary_shared_key)
     : null
   )
 
@@ -240,18 +240,27 @@ data "azurerm_shared_image" "tfe" {
 # Virtual machine scale set (VMSS)
 #------------------------------------------------------------------------------
 resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
-  name                        = "${var.friendly_name_prefix}-tfe-vmss"
-  resource_group_name         = local.resource_group_name
-  location                    = var.location
-  instances                   = var.vmss_instance_count
-  sku                         = var.vm_sku
-  admin_username              = var.vm_admin_username
-  overprovision               = false
-  upgrade_mode                = "Manual"
-  zone_balance                = true
-  zones                       = var.availability_zones
-  health_probe_id             = var.create_lb ? azurerm_lb_probe.tfe[0].id : null
-  custom_data                 = base64encode(templatefile("${local.tfe_startup_script_tpl}", local.custom_data_args))
+  name                = "${var.friendly_name_prefix}-tfe-vmss"
+  resource_group_name = local.resource_group_name
+  location            = var.location
+  instances           = var.vmss_instance_count
+  sku                 = var.vm_sku
+  admin_username      = var.vm_admin_username
+  overprovision       = false
+  upgrade_mode        = "Manual"
+  zone_balance        = true
+  zones               = var.availability_zones
+  health_probe_id     = var.create_lb ? azurerm_lb_probe.tfe[0].id : null
+
+  # Wrap the startup script in a cloud-boothook so it runs on every boot
+  # regardless of whether cloud-init has previously run on this image.
+  custom_data = base64encode(join("\n", [
+    "#cloud-boothook",
+    "#!/bin/bash",
+    "# Remove internal HashiCorp apt repos that cause 401 errors outside corp network",
+    "find /etc/apt/sources.list.d/ -name '*artifactory*' -delete 2>/dev/null || true",
+    templatefile("${local.tfe_startup_script_tpl}", local.custom_data_args),
+  ]))
 
   scale_in {
     rule = "OldestVM"
@@ -307,3 +316,4 @@ resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
     var.common_tags
   )
 }
+

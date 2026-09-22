@@ -52,6 +52,14 @@ function determine_os_distro {
   echo "$OS_DISTRO_DETECTED"
 }
 
+function remove_bad_apt_repos {
+  # The base image may contain internal HashiCorp Artifactory apt sources that
+  # require credentials not available at runtime — remove them before any apt-get.
+  log "INFO" "Removing any unauthenticated internal apt repositories."
+  find /etc/apt/sources.list.d/ -name "*artifactory*" -o -name "*hashicorp.engineering*" \
+    | xargs -r rm -f
+}
+
 function install_azcli {
   local OS_DISTRO="$1"
   local OS_MAJOR_VERSION="$2"
@@ -599,6 +607,8 @@ function main {
 
   log "INFO" "Creating TFE directories."
   mkdir -p $TFE_CONFIG_DIR $TFE_TLS_CERTS_DIR
+
+  remove_bad_apt_repos
 
   log "INFO" "Installing software dependencies..."
   install_azcli "$OS_DISTRO" "$OS_MAJOR_VERSION"
