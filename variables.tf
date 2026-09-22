@@ -337,7 +337,8 @@ variable "tfe_run_pipeline_docker_network" {
 #------------------------------------------------------------------------------
 variable "vnet_id" {
   type        = string
-  description = "ID of VNet where TFE will be deployed."
+  description = "ID of VNet where TFE will be deployed. Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "create_lb" {
@@ -366,12 +367,14 @@ variable "lb_private_ip" {
 
 variable "vm_subnet_id" {
   type        = string
-  description = "Subnet ID for Virtual Machine Scaleset (VMSS)."
+  description = "Subnet ID for Virtual Machine Scaleset (VMSS). Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "db_subnet_id" {
   type        = string
-  description = "Subnet ID for PostgreSQL database."
+  description = "Subnet ID for PostgreSQL database. Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "redis_subnet_id" {
@@ -493,21 +496,10 @@ variable "vm_os_image" {
   }
 }
 
-variable "vm_custom_image_name" {
+variable "image_factory_subscription_id" {
   type        = string
-  description = "Name of custom VM image to use for VMSS. If not using a custom image, leave this blank."
-  default     = null
-}
-
-variable "vm_custom_image_rg_name" {
-  type        = string
-  description = "Name of Resource Group where `vm_custom_image_name` image resides. Only valid if `vm_custom_image_name` is not `null`."
-  default     = null
-
-  validation {
-    condition     = var.vm_custom_image_name != null ? var.vm_custom_image_rg_name != null : true
-    error_message = "A value is required when `vm_custom_image_name` is not `null`."
-  }
+  description = "Subscription ID of the hashicorp02-image-factory-prod subscription hosting the shared image gallery."
+  default     = "338f0fa5-b5ae-4847-9821-1808613db6c5"
 }
 
 variable "custom_tfe_startup_script_template" {
@@ -558,9 +550,9 @@ variable "vm_enable_boot_diagnostics" {
   default     = false
 }
 
-variable "vm_automatic_instance_repair_enabled" {
+variable "vm_enable_auto_instance_repair" {
   type        = bool
-  description = "Boolean to enable automatic instance repairs for VMSS."
+  description = "Boolean to enable automatic instance repair for VMSS."
   default     = true
 }
 
@@ -926,3 +918,76 @@ variable "custom_fluent_bit_config" {
   description = "Custom Fluent Bit configuration for log forwarding. Only valid if `log_fwd_destination_type` is `custom`."
   default     = null
 }
+
+#------------------------------------------------------------------------------
+# Networking
+#------------------------------------------------------------------------------
+variable "create_networking_resources" {
+  type        = bool
+  description = "Boolean to create the networking resource group, VNet, and subnets. Set to false if these already exist."
+  default     = false
+}
+
+variable "networking_resource_group_name" {
+  type        = string
+  description = "Name of the networking resource group. Used when `create_networking_resources` is `true`."
+  default     = "tfe-networking-rg"
+}
+
+variable "vnet_name" {
+  type        = string
+  description = "Name of the Virtual Network to create. Used when `create_networking_resources` is `true`."
+  default     = "tfe-vnet"
+}
+
+variable "vnet_address_space" {
+  type        = string
+  description = "Address space for the Virtual Network. Used when `create_networking_resources` is `true`."
+  default     = "10.0.0.0/16"
+}
+
+variable "lb_subnet_cidr" {
+  type        = string
+  description = "CIDR for the load balancer subnet. Used when `create_networking_resources` is `true`."
+  default     = "10.0.1.0/24"
+}
+
+variable "vm_subnet_cidr" {
+  type        = string
+  description = "CIDR for the VM subnet. Used when `create_networking_resources` is `true`."
+  default     = "10.0.2.0/24"
+}
+
+variable "db_subnet_cidr" {
+  type        = string
+  description = "CIDR for the database subnet. Used when `create_networking_resources` is `true`."
+  default     = "10.0.3.0/24"
+}
+
+variable "redis_subnet_cidr" {
+  type        = string
+  description = "CIDR for the Redis subnet. Used when `create_networking_resources` is `true`."
+  default     = "10.0.4.0/24"
+}
+
+variable "create_bastion_host" {
+  type        = bool
+  description = "Boolean to create an Azure Bastion host for VM access. Only valid when `create_networking_resources` is `true`."
+  default     = true
+}
+
+variable "bastion_subnet_cidr" {
+  type        = string
+  description = "CIDR for the AzureBastionSubnet. Must be at least /26. Used when `create_bastion_host` is `true`."
+  default     = "10.0.5.0/26"
+}
+
+#------------------------------------------------------------------------------
+# Log Analytics
+#------------------------------------------------------------------------------
+variable "create_log_analytics_workspace" {
+  type        = bool
+  description = "Boolean to create the Log Analytics resource group and workspace."
+  default     = false
+}
+

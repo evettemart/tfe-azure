@@ -11,8 +11,19 @@ provider "azurerm" {
   features {}
 }
 
+provider "azurerm" {
+  alias           = "image_factory"
+  subscription_id = var.image_factory_subscription_id
+  features {}
+}
+
 module "tfe" {
   source = "./.."
+
+  providers = {
+    azurerm               = azurerm
+    azurerm.image_factory = azurerm.image_factory
+  }
 
   # --- Common --- #
   create_resource_group = var.create_resource_group
@@ -49,18 +60,30 @@ module "tfe" {
   tfe_operational_mode                 = var.tfe_operational_mode
 
   # --- Networking --- #
-  vnet_id         = var.vnet_id
-  lb_subnet_id    = var.lb_subnet_id
-  lb_is_internal  = var.lb_is_internal
-  lb_private_ip   = var.lb_private_ip
-  vm_subnet_id    = var.vm_subnet_id
-  db_subnet_id    = var.db_subnet_id
-  redis_subnet_id = var.redis_subnet_id
+  create_networking_resources    = var.create_networking_resources
+  networking_resource_group_name = var.networking_resource_group_name
+  vnet_name                      = var.vnet_name
+  vnet_address_space             = var.vnet_address_space
+  lb_subnet_cidr                 = var.lb_subnet_cidr
+  vm_subnet_cidr                 = var.vm_subnet_cidr
+  db_subnet_cidr                 = var.db_subnet_cidr
+  redis_subnet_cidr              = var.redis_subnet_cidr
+  create_bastion_host            = var.create_bastion_host
+  bastion_subnet_cidr            = var.bastion_subnet_cidr
+  vnet_id                        = var.vnet_id
+  lb_subnet_id                   = var.lb_subnet_id
+  lb_is_internal                 = var.lb_is_internal
+  lb_private_ip                  = var.lb_private_ip
+  vm_subnet_id                   = var.vm_subnet_id
+  db_subnet_id                   = var.db_subnet_id
+  redis_subnet_id                = var.redis_subnet_id
 
   # --- DNS (optional) --- #
   create_tfe_private_dns_record = var.create_tfe_private_dns_record
   private_dns_zone_name         = var.private_dns_zone_name
   private_dns_zone_rg_name      = var.private_dns_zone_rg_name
+
+  image_factory_subscription_id = var.image_factory_subscription_id
 
   # --- Compute --- #
   vmss_instance_count = var.vmss_instance_count
@@ -69,8 +92,9 @@ module "tfe" {
   vm_sku              = var.vm_sku
   container_runtime   = var.container_runtime
   docker_version      = var.docker_version
-  vm_admin_username          = var.vm_admin_username
-  vm_enable_boot_diagnostics = var.vm_enable_boot_diagnostics
+  vm_admin_username              = var.vm_admin_username
+  vm_enable_boot_diagnostics     = var.vm_enable_boot_diagnostics
+  vm_enable_auto_instance_repair = var.vm_enable_auto_instance_repair
 
   # --- Database --- #
   tfe_database_password_keyvault_secret_name = var.tfe_database_password_keyvault_secret_name
@@ -85,7 +109,8 @@ module "tfe" {
   # --- Object storage --- #
   storage_account_ip_allow = var.storage_account_ip_allow
 
-  # --- Log forwarding (optional) --- #
+  # --- Log Analytics + Log forwarding --- #
+  create_log_analytics_workspace  = var.create_log_analytics_workspace
   tfe_log_forwarding_enabled      = var.tfe_log_forwarding_enabled
   log_fwd_destination_type        = var.log_fwd_destination_type
   log_analytics_workspace_name    = var.log_analytics_workspace_name

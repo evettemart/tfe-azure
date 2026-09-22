@@ -23,7 +23,7 @@ resource "azurerm_postgresql_flexible_server" "tfe" {
   version                       = var.postgres_version
   sku_name                      = var.postgres_sku
   storage_mb                    = var.postgres_storage_mb
-  delegated_subnet_id           = var.db_subnet_id
+  delegated_subnet_id           = local.resolved_db_subnet_id
   private_dns_zone_id           = var.create_postgres_private_endpoint ? azurerm_private_dns_zone.postgres[0].id : null
   zone                          = var.postgres_primary_availability_zone
   public_network_access_enabled = false
@@ -121,6 +121,6 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
   name                  = "${var.friendly_name_prefix}-pg-priv-dns-zone-vnet-link"
   resource_group_name   = local.resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.postgres[0].name
-  virtual_network_id    = var.vnet_id
+  virtual_network_id    = local.resolved_vnet_id
   tags                  = var.common_tags
 }

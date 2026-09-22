@@ -16,7 +16,7 @@ resource "azurerm_redis_cache" "tfe" {
   non_ssl_port_enabled          = var.redis_non_ssl_port_enabled
   minimum_tls_version           = var.redis_min_tls_version
   public_network_access_enabled = false
-  subnet_id                     = var.create_redis_private_endpoint ? null : var.redis_subnet_id
+  subnet_id                     = var.create_redis_private_endpoint ? null : local.resolved_redis_subnet_id
   redis_version                 = var.redis_version
   zones                         = var.availability_zones
 
@@ -96,7 +96,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "redis" {
   name                  = "${var.friendly_name_prefix}-redis-priv-dns-vnet-link"
   resource_group_name   = local.resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.redis[0].name
-  virtual_network_id    = var.vnet_id
+  virtual_network_id    = local.resolved_vnet_id
   tags                  = var.common_tags
 }
 
@@ -106,7 +106,7 @@ resource "azurerm_private_endpoint" "redis" {
   name                = "${var.friendly_name_prefix}-${each.key}-redis-private-endpoint"
   resource_group_name = local.resource_group_name
   location            = var.location
-  subnet_id           = var.redis_subnet_id
+  subnet_id           = local.resolved_redis_subnet_id
 
   private_service_connection {
     name                           = "${var.friendly_name_prefix}-${each.key}-redis-private-connection"
