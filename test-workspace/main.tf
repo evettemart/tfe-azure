@@ -15,7 +15,7 @@ terraform {
     }
   }
 
-  required_version = ">= 1.9"
+  required_version = "~> 1.9"
 }
 
 resource "random_string" "test" {
