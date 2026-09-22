@@ -2,20 +2,38 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
-# Log fowarding - log analytics workspace
+# Log forwarding - log analytics workspace
+# Use the managed resource when Terraform creates the workspace, otherwise
+# fall back to a data source lookup for pre-existing workspaces.
 #------------------------------------------------------------------------------
 data "azurerm_log_analytics_workspace" "logging" {
-  count = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? 1 : 0
+  count = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" && !var.create_log_analytics_workspace ? 1 : 0
 
   resource_group_name = var.log_analytics_workspace_rg_name == null ? local.resource_group_name : var.log_analytics_workspace_rg_name
   name                = var.log_analytics_workspace_name
 }
 
 locals {
+  // Resolve workspace_id and access_key from either the managed resource or the data source
+  log_analytics_workspace_id = (
+    var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
+      (var.create_log_analytics_workspace ?
+        azurerm_log_analytics_workspace.tfe[0].workspace_id :
+        data.azurerm_log_analytics_workspace.logging[0].workspace_id)
+    : null
+  )
+  log_analytics_access_key = (
+    var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
+      (var.create_log_analytics_workspace ?
+        azurerm_log_analytics_workspace.tfe[0].primary_shared_key :
+        data.azurerm_log_analytics_workspace.logging[0].primary_shared_key)
+    : null
+  )
+
   // Azure log analytics workspace destination
   fluent_bit_log_analytics_args = {
-    log_analytics_workspace_id = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? data.azurerm_log_analytics_workspace.logging[0].workspace_id : null
-    log_analytics_access_key   = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? data.azurerm_log_analytics_workspace.logging[0].primary_shared_key : null
+    log_analytics_workspace_id = local.log_analytics_workspace_id
+    log_analytics_access_key   = local.log_analytics_access_key
   }
   fluent_bit_log_analytics_config = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? (templatefile("${path.module}/templates/fluent-bit-log-analytics.conf.tpl", local.fluent_bit_log_analytics_args)) : ""
 
@@ -208,61 +226,32 @@ locals {
   }
 }
 
-locals {
-  os_image_map = {
-    redhat8    = { publisher = "RedHat", offer = "RHEL" }
-    redhat9    = { publisher = "RedHat", offer = "RHEL" }
-    ubuntu2204 = { publisher = "Canonical", offer = "0001-com-ubuntu-server-jammy" }
-    ubuntu2404 = { publisher = "Canonical", offer = "ubuntu-24_04-lts" }
-  }
-
-  vm_image_publisher = local.os_image_map[var.vm_os_image].publisher
-  vm_image_offer     = local.os_image_map[var.vm_os_image].offer
-  vm_image_sku = (
-    var.vm_os_image == "redhat8" ? "810-gen2" :
-    var.vm_os_image == "redhat9" ? "95_gen2" :
-    var.vm_os_image == "ubuntu2204" ? "22_04-lts-gen2" :
-    var.vm_os_image == "ubuntu2404" ? "ubuntu-pro" : null
-  )
-}
-
 #------------------------------------------------------------------------------
-# Custom VM image lookup
+# Approved shared image gallery lookup
 #------------------------------------------------------------------------------
-data "azurerm_image" "custom" {
-  count = var.vm_custom_image_name == null ? 0 : 1
-
-  name                = var.vm_custom_image_name
-  resource_group_name = var.vm_custom_image_rg_name
-}
-
-#------------------------------------------------------------------------------
-# Latest OS image lookup
-#------------------------------------------------------------------------------
-data "azurerm_platform_image" "latest_os_image" {
-  location  = var.location
-  publisher = local.vm_image_publisher
-  offer     = local.vm_image_offer
-  sku       = local.vm_image_sku
+data "azurerm_shared_image" "tfe" {
+  provider            = azurerm.image_factory
+  name                = "hc-base-ubuntu-2404-amd64"
+  gallery_name        = "hcbaseGallery"
+  resource_group_name = "hc-base-rg-gallery"
 }
 
 #------------------------------------------------------------------------------
 # Virtual machine scale set (VMSS)
 #------------------------------------------------------------------------------
 resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
-  name                = "${var.friendly_name_prefix}-tfe-vmss"
-  resource_group_name = local.resource_group_name
-  location            = var.location
-  instances           = var.vmss_instance_count
-  sku                 = var.vm_sku
-  admin_username      = var.vm_admin_username
-  overprovision       = false
-  upgrade_mode        = "Manual"
-  zone_balance        = true
-  zones               = var.availability_zones
-  health_probe_id     = var.create_lb ? azurerm_lb_probe.tfe[0].id : null
-  # custom_data         = base64encode(templatefile("${path.module}/templates/tfe_custom_data.sh.tpl", local.custom_data_args))
-  custom_data = base64encode(templatefile("${local.tfe_startup_script_tpl}", local.custom_data_args))
+  name                        = "${var.friendly_name_prefix}-tfe-vmss"
+  resource_group_name         = local.resource_group_name
+  location                    = var.location
+  instances                   = var.vmss_instance_count
+  sku                         = var.vm_sku
+  admin_username              = var.vm_admin_username
+  overprovision               = false
+  upgrade_mode                = "Manual"
+  zone_balance                = true
+  zones                       = var.availability_zones
+  health_probe_id             = var.create_lb ? azurerm_lb_probe.tfe[0].id : null
+  custom_data                 = base64encode(templatefile("${local.tfe_startup_script_tpl}", local.custom_data_args))
 
   scale_in {
     rule = "OldestVM"
@@ -282,18 +271,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
     }
   }
 
-  source_image_id = var.vm_custom_image_name != null ? data.azurerm_image.custom[0].id : null
-
-  dynamic "source_image_reference" {
-    for_each = var.vm_custom_image_name == null ? [true] : []
-
-    content {
-      publisher = local.vm_image_publisher
-      offer     = local.vm_image_offer
-      sku       = local.vm_image_sku
-      version   = data.azurerm_platform_image.latest_os_image.version
-    }
-  }
+  source_image_id = data.azurerm_shared_image.tfe.id
 
   network_interface {
     name    = "tfe-vm-nic"
@@ -302,7 +280,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
     ip_configuration {
       name                                   = "internal"
       primary                                = true
-      subnet_id                              = var.vm_subnet_id
+      subnet_id                              = local.resolved_vm_subnet_id
       load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.tfe_servers[0].id]
     }
   }
@@ -315,7 +293,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "tfe" {
   }
 
   automatic_instance_repair {
-    enabled      = true
+    enabled      = var.vm_enable_auto_instance_repair
     grace_period = "PT15M"
   }
 

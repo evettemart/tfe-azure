@@ -2,6 +2,90 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
+# Image factory
+#------------------------------------------------------------------------------
+variable "image_factory_subscription_id" {
+  type        = string
+  description = "Subscription ID of the hashicorp02-image-factory-prod subscription hosting the shared image gallery."
+  default     = "338f0fa5-b5ae-4847-9821-1808613db6c5"
+}
+
+#------------------------------------------------------------------------------
+# Networking
+#------------------------------------------------------------------------------
+variable "create_networking_resources" {
+  type        = bool
+  description = "Boolean to create the networking resource group, VNet, and subnets."
+  default     = false
+}
+
+variable "networking_resource_group_name" {
+  type        = string
+  description = "Name of the networking resource group."
+  default     = "tfe-networking-rg"
+}
+
+variable "vnet_name" {
+  type        = string
+  description = "Name of the Virtual Network to create."
+  default     = "tfe-vnet"
+}
+
+variable "vnet_address_space" {
+  type        = string
+  description = "Address space for the Virtual Network."
+  default     = "10.0.0.0/16"
+}
+
+variable "lb_subnet_cidr" {
+  type        = string
+  description = "CIDR for the load balancer subnet."
+  default     = "10.0.1.0/24"
+}
+
+variable "vm_subnet_cidr" {
+  type        = string
+  description = "CIDR for the VM subnet."
+  default     = "10.0.2.0/24"
+}
+
+variable "db_subnet_cidr" {
+  type        = string
+  description = "CIDR for the database subnet."
+  default     = "10.0.3.0/24"
+}
+
+variable "redis_subnet_cidr" {
+  type        = string
+  description = "CIDR for the Redis subnet."
+  default     = "10.0.4.0/24"
+}
+
+variable "create_bastion_host" {
+  type        = bool
+  description = "Boolean to create an Azure Bastion host for VM access."
+  default     = true
+}
+
+variable "bastion_subnet_cidr" {
+  type        = string
+  description = "CIDR for the AzureBastionSubnet. Must be at least /26."
+  default     = "10.0.5.0/26"
+}
+
+#------------------------------------------------------------------------------
+# Log Analytics
+#------------------------------------------------------------------------------
+variable "create_log_analytics_workspace" {
+  type        = bool
+  description = "Boolean to create the Log Analytics resource group and workspace."
+  default     = false
+}
+
+
+
+
+#------------------------------------------------------------------------------
 # Common
 #------------------------------------------------------------------------------
 variable "create_resource_group" {
@@ -337,7 +421,8 @@ variable "tfe_run_pipeline_docker_network" {
 #------------------------------------------------------------------------------
 variable "vnet_id" {
   type        = string
-  description = "ID of VNet where TFE will be deployed."
+  description = "ID of VNet where TFE will be deployed. Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "create_lb" {
@@ -366,12 +451,14 @@ variable "lb_private_ip" {
 
 variable "vm_subnet_id" {
   type        = string
-  description = "Subnet ID for Virtual Machine Scaleset (VMSS)."
+  description = "Subnet ID for Virtual Machine Scaleset (VMSS). Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "db_subnet_id" {
   type        = string
-  description = "Subnet ID for PostgreSQL database."
+  description = "Subnet ID for PostgreSQL database. Only required when `create_networking_resources` is `false`."
+  default     = null
 }
 
 variable "redis_subnet_id" {
@@ -556,6 +643,12 @@ variable "vm_enable_boot_diagnostics" {
   type        = bool
   description = "Boolean to enable boot diagnostics for VMSS."
   default     = false
+}
+
+variable "vm_enable_auto_instance_repair" {
+  type        = bool
+  description = "Boolean to enable automatic instance repair for VMSS."
+  default     = true
 }
 
 #------------------------------------------------------------------------------

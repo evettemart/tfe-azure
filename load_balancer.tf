@@ -40,7 +40,7 @@ resource "azurerm_lb" "tfe" {
     name                          = "tfe-frontend-${local.lb_frontend_name_suffix}"
     zones                         = var.lb_is_internal ? var.availability_zones : null
     public_ip_address_id          = !var.lb_is_internal ? azurerm_public_ip.tfe_lb[0].id : null
-    subnet_id                     = var.lb_is_internal ? var.lb_subnet_id : null
+    subnet_id                     = var.lb_is_internal ? local.resolved_lb_subnet_id : null
     private_ip_address_allocation = var.lb_is_internal ? "Static" : null
     private_ip_address            = var.lb_is_internal ? var.lb_private_ip : null
   }

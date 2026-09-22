@@ -62,7 +62,7 @@ resource "azurerm_storage_account_network_rules" "tfe" {
   storage_account_id         = azurerm_storage_account.tfe[0].id
   default_action             = "Deny"
   ip_rules                   = var.storage_account_ip_allow
-  virtual_network_subnet_ids = compact([var.vm_subnet_id, var.secondary_vm_subnet_id])
+  virtual_network_subnet_ids = compact([local.resolved_vm_subnet_id, var.secondary_vm_subnet_id])
   bypass                     = ["AzureServices"]
 }
 
@@ -87,7 +87,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "blob_storage" {
   name                  = "${var.friendly_name_prefix}-blob-priv-dns-vnet-link"
   resource_group_name   = local.resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.blob_storage[0].name
-  virtual_network_id    = var.vnet_id
+  virtual_network_id    = local.resolved_vnet_id
   tags                  = var.common_tags
 }
 
@@ -97,7 +97,7 @@ resource "azurerm_private_endpoint" "blob_storage" {
   name                = "${var.friendly_name_prefix}-tfe-blob-storage-priv-endpoint"
   resource_group_name = local.resource_group_name
   location            = var.location
-  subnet_id           = var.vm_subnet_id
+  subnet_id           = local.resolved_vm_subnet_id
 
   private_service_connection {
     name                           = "tfe-blob-storage-priv-endpoint-connection"
