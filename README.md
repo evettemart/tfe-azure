@@ -188,6 +188,82 @@ Go to `https://tfe.azure.example.com` and log in with the credentials you just c
 
 >📝 Note: This module automatically switches between `/_health_check` and `/api/v1/health/readiness` based on `tfe_image_tag` so the Azure load balancer probe and bootstrap polling stay aligned with the deployed TFE version.
 
+## Running the test workspace
+
+Once TFE is deployed and you have created the initial admin account, you can verify end-to-end functionality by running a small test Terraform workspace using the [`scripts/run-test-workspace.sh`](scripts/run-test-workspace.sh) script. It installs Terraform 1.9.x on the VM, creates an organisation/workspace in TFE, and runs a `terraform apply` of a `random_string` resource.
+
+### Prerequisites
+
+- `az` CLI installed and `az login` already done on your Mac
+- `ssh` and `scp` available on your Mac
+- TFE is running (`deploy-tfe.sh` completed successfully)
+- You have created the initial admin account (see [First-time login](#first-time-login))
+- A TFE organisation already exists (created via the UI under **New organisation**)
+
+### Step 1 — Create a user API token in TFE
+
+1. Open `https://tfe.azure.example.com` in the Windows bastion browser
+2. Click your avatar (top-right) → **User Settings** → **Tokens**
+3. Click **Create an API token**, give it a name (e.g. `cli-test`), and copy the value
+
+> ⚠️ Do **not** use the IACT token from `tfectl admin token` here — that is a one-time bootstrap token for creating the first admin user and will be rejected for all other API operations.
+
+### Step 2 — Export environment variables
+
+```bash
+export SSH_KEY=~/.ssh/<your-private-key>
+export TFE_ORG=<your-org-name>           # must already exist in TFE
+export TFE_TOKEN=<paste-token-from-step-1>
+```
+
+### Step 3 — Run the script
+
+From the repo root:
+
+```bash
+bash tfe-azure/scripts/run-test-workspace.sh
+```
+
+The script will:
+
+1. Look up the TFE VM private IP from the VMSS
+2. Open an Azure Bastion SSH tunnel on port `2222` (override with `TUNNEL_PORT=<n>`)
+3. Install Terraform **1.9.8** on the VM if not already at that version (required — TFE 1.0.1 is incompatible with CLI ≥ 1.10)
+4. Add `tfe.azure.example.com → 127.0.0.1` to `/etc/hosts` on the VM
+5. Install the TFE CA bundle into the OS trust store so TLS is trusted
+6. Copy `test-workspace/` to the VM and substitute your org name
+7. Write `~/.terraform.d/credentials.tfrc.json` with your API token
+8. Run `terraform init` and `terraform apply -auto-approve`
+9. Close the tunnel on exit
+
+### Expected output
+
+```
+[run-test] Terraform 1.9.8 already installed — skipping.
+[run-test] Writing Terraform credentials file on VM...
+[run-test] Credentials file written.
+[run-test] Running terraform init...
+[run-test] Running terraform apply...
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+  random_string = "aB3dEf7gHi"
+
+[run-test] Done. Check the TFE UI at https://tfe.azure.example.com for the run results.
+```
+
+The run will also appear in the TFE UI under **Organisations → `<TFE_ORG>` → Workspaces → test-random-string**.
+
+### Re-running
+
+The script is fully idempotent — safe to run multiple times. On subsequent runs:
+- Terraform install is skipped (version already matches)
+- `/etc/hosts` entry is not duplicated (checked with `grep -q` first)
+- CA bundle is re-copied (harmless overwrite)
+- Workspace directory is wiped and re-copied fresh
+- `terraform apply` is a no-op (no diff in state)
+
 ## Docs
 
 Below are links to various docs related to the customization and management of your TFE deployment:
