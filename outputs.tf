@@ -25,6 +25,19 @@ output "url" {
   description = "URL of TFE application based on `tfe_fqdn` input."
 }
 
+#------------------------------------------------------------------------------
+# Dashboard
+#------------------------------------------------------------------------------
+output "dashboard_url" {
+  value       = var.create_dashboard ? "https://portal.azure.com/#@/dashboard/arm${azurerm_portal_dashboard.tfe[0].id}" : null
+  description = "Azure Portal URL to open the TFE Portal Dashboard. Only populated when `create_dashboard` is `true`."
+}
+
+output "workbook_url" {
+  value       = var.create_workbook ? "https://portal.azure.com/#resource${azurerm_application_insights_workbook.tfe[0].id}" : null
+  description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
+}
+
 output "tfe_admin_console_url_pattern" {
   value       = !var.tfe_admin_console_disabled ? "https://${var.tfe_fqdn}:${var.tfe_admin_https_port}" : null
   description = "URL pattern to access the TFE Admin Console when it is enabled."

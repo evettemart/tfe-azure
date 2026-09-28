@@ -1014,6 +1014,21 @@ variable "create_log_analytics_workspace" {
 
 
 #------------------------------------------------------------------------------
+# Dashboard
+#------------------------------------------------------------------------------
+variable "create_dashboard" {
+  type        = bool
+  description = "Boolean to create an Azure Portal shared dashboard showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and `log_fwd_destination_type = \"log_analytics\"`."
+  default     = false
+}
+
+variable "create_workbook" {
+  type        = bool
+  description = "Boolean to create an Azure Monitor Workbook with interactive KQL charts showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and `log_fwd_destination_type = \"log_analytics\"`."
+  default     = false
+}
+
+#------------------------------------------------------------------------------
 # Windows bastion host
 #------------------------------------------------------------------------------
 variable "create_windows_bastion" {
