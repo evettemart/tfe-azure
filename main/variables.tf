@@ -962,6 +962,21 @@ variable "create_redis_private_endpoint" {
 }
 
 #------------------------------------------------------------------------------
+# Dashboard
+#------------------------------------------------------------------------------
+variable "create_dashboard" {
+  type        = bool
+  description = "Boolean to create an Azure Portal shared dashboard showing TFE workspace run summaries."
+  default     = false
+}
+
+variable "create_workbook" {
+  type        = bool
+  description = "Boolean to create an Azure Monitor Workbook with interactive KQL charts showing TFE workspace run summaries."
+  default     = false
+}
+
+#------------------------------------------------------------------------------
 # Log forwarding
 #------------------------------------------------------------------------------
 variable "tfe_log_forwarding_enabled" {

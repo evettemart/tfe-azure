@@ -40,3 +40,13 @@ output "public_dns_zone_name_servers" {
   value       = module.tfe.public_dns_zone_name_servers
   description = "Authoritative name servers for the created public DNS zone. Delegate your domain to these."
 }
+
+output "dashboard_url" {
+  value       = module.tfe.dashboard_url
+  description = "Azure Portal URL to open the TFE Portal Dashboard. Only populated when `create_dashboard` is `true`."
+}
+
+output "workbook_url" {
+  value       = module.tfe.workbook_url
+  description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
+}

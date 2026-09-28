@@ -120,6 +120,10 @@ module "tfe" {
   # --- Object storage --- #
   storage_account_ip_allow = var.storage_account_ip_allow
 
+  # --- Dashboard & Workbook (optional) --- #
+  create_dashboard = var.create_dashboard
+  create_workbook  = var.create_workbook
+
   # --- Log Analytics + Log forwarding --- #
   create_log_analytics_workspace  = var.create_log_analytics_workspace
   tfe_log_forwarding_enabled      = var.tfe_log_forwarding_enabled
