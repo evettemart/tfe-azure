@@ -28,7 +28,7 @@ locals {
 
   # Full ARM resource ID of the Log Analytics workspace used as the KQL source.
   log_analytics_resource_id = (
-    (var.create_dashboard || var.create_workbook) && var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
+    (var.create_dashboard || var.create_workbook) && var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) ?
     (var.create_log_analytics_workspace ?
       azurerm_log_analytics_workspace.tfe[0].id :
     data.azurerm_log_analytics_workspace.logging[0].id)

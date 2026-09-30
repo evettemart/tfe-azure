@@ -50,3 +50,13 @@ output "workbook_url" {
   value       = module.tfe.workbook_url
   description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
 }
+
+output "event_hub_namespace_id" {
+  value       = module.tfe.event_hub_namespace_id
+  description = "The ID of the Azure Event Hubs namespace created for TFE log forwarding."
+}
+
+output "event_hub_id" {
+  value       = module.tfe.event_hub_id
+  description = "The ID of the Azure Event Hub topic created for TFE log forwarding."
+}
