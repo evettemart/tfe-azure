@@ -1,0 +1,47 @@
+# Verification of how the version constraint is expressed
+# Validates that module version constraints use major-version boundary expressions: "~> <major>" or "~> <major>.0"
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+is_valid_module_version_format = func(vc) {
+	trimmed = strings.trim_space(vc)
+	if not strings.has_prefix(trimmed, "~>") {
+		return false
+	}
+	
+	# Extract the version part after '~>'
+	ver_str = strings.trim_space(strings.trim_prefix(trimmed, "~>"))
+	parts = strings.split(ver_str, ".")
+	
+	# "~> <major>" or "~> <major>.0"
+	if length(parts) == 1 {
+		return true
+	}
+	if length(parts) == 2 and parts[1] == "0" {
+		return true
+	}
+	
+	return false
+}
+
+invalid_module_version_formats = []
+
+for tfconfig.module_calls as address, call {
+	# Check only remote modules that have declared a version constraint
+	if not strings.has_prefix(call.source, "./") and not strings.has_prefix(call.source, "../") {
+		version = call.version_constraint else ""
+		if version != "" and not is_valid_module_version_format(version) {
+			invalid_module_version_formats = append(invalid_module_version_formats, {
+				"address":            address,
+				"module":             call.name,
+				"source":             call.source,
+				"version_constraint": version,
+			})
+		}
+	}
+}
+
+main = rule {
+	length(invalid_module_version_formats) == 0
+}

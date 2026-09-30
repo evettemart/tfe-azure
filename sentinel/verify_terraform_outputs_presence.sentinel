@@ -1,0 +1,15 @@
+# Verification of Terraform outputs presence
+# Ensures that Terraform configurations define at least one output and prevents deployments with no outputs declared.
+
+import "tfconfig/v2" as tfconfig
+
+has_outputs = func() {
+	if length(tfconfig.outputs) > 0 {
+		return true
+	}
+	return false
+}
+
+main = rule {
+	has_outputs()
+}

@@ -1,0 +1,40 @@
+# Verification of module sources
+# Enforces the use of approved Terraform module sources from authorized TFE registries.
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+param approved_registries default [
+	"tfe.windtre.it",
+	"tfe.azu.windtre.it",
+]
+
+is_approved_source = func(source) {
+	# Ignore local relative modules
+	if strings.has_prefix(source, "./") or strings.has_prefix(source, "../") {
+		return true
+	}
+	
+	for approved_registries as registry {
+		if strings.has_prefix(source, registry + "/") {
+			return true
+		}
+	}
+	return false
+}
+
+invalid_module_sources = []
+
+for tfconfig.module_calls as address, call {
+	if not is_approved_source(call.source) {
+		invalid_module_sources = append(invalid_module_sources, {
+			"address": address,
+			"module":  call.name,
+			"source":  call.source,
+		})
+	}
+}
+
+main = rule {
+	length(invalid_module_sources) == 0
+}

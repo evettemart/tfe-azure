@@ -1,0 +1,43 @@
+# Verification of authorized Terraform providers
+# Ensures that only providers explicitly authorized by the organization are declared and used.
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+# Approved provider source list
+param approved_providers default [
+	"hashicorp/aws",
+	"hashicorp/azurerm",
+	"hashicorp/google",
+	"hashicorp/random",
+	"hashicorp/tls",
+	"azure/azapi",
+]
+
+# Helper function to extract provider source (e.g. registry.terraform.io/hashicorp/azurerm -> hashicorp/azurerm)
+normalize_provider_source = func(source) {
+	parts = strings.split(source, "/")
+	if length(parts) == 3 {
+		return parts[1] + "/" + parts[2]
+	}
+	return source
+}
+
+# Collect all provider requirements across modules
+invalid_providers = []
+
+for tfconfig.provider_requirements as address, prov {
+	normalized = normalize_provider_source(prov.source)
+	if normalized not in approved_providers and prov.source not in approved_providers {
+		invalid_providers = append(invalid_providers, {
+			"address": address,
+			"name":    prov.name,
+			"source":  prov.source,
+		})
+	}
+}
+
+# Validation rule
+main = rule {
+	length(invalid_providers) == 0
+}
