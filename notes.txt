@@ -233,7 +233,7 @@ az role assignment create \
   --role "Virtual Machine Contributor" \
   --assignee-object-id "$MY_OBJECT_ID" \
   --assignee-principal-type User \
-  --scope "/subscriptions/338f0fa5-b5ae-4847-9821-1808613db6c5/resourceGroups/tfe-rg"
+  --scope "/subscriptions/3ce37cfd-e614-4570-8d11-015256bd51a4/resourceGroups/tfe-rg"
 
   Reset tfeadmin
   az vmss update-instances \
