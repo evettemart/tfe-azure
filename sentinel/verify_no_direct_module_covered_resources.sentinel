@@ -1,0 +1,36 @@
+# Verification that directly declared resources are not already covered by an approved module
+# Prevents the direct creation of resource types for which a standard/approved module is mandatory.
+
+import "tfconfig/v2" as tfconfig
+
+# List of resource types that must only be provisioned via approved standard modules
+param prohibited_direct_resource_types default [
+	"azurerm_virtual_machine",
+	"azurerm_linux_virtual_machine",
+	"azurerm_windows_virtual_machine",
+	"azurerm_kubernetes_cluster",
+	"azurerm_postgresql_flexible_server",
+	"aws_instance",
+	"aws_eks_cluster",
+	"google_compute_instance",
+]
+
+disallowed_root_resources = []
+
+# Validate root module direct resources
+for tfconfig.resources as address, res {
+	# Check resources declared directly in the root module (not inside a child module call)
+	if res.module_address == "" and res.mode == "managed" {
+		if res.type in prohibited_direct_resource_types {
+			disallowed_root_resources = append(disallowed_root_resources, {
+				"address": address,
+				"name":    res.name,
+				"type":    res.type,
+			})
+		}
+	}
+}
+
+main = rule {
+	length(disallowed_root_resources) == 0
+}

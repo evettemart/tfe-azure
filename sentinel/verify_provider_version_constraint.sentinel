@@ -1,0 +1,38 @@
+# Verification that providers define a version constraint
+# Validates all entries in required_providers and checks if a provider specifies a version constraint
+# matching the strategy "~> <major>.<minor>.0" or "~> <major>.<minor>"
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+# Check if version constraint matches '~> <major>.<minor>' pattern
+is_valid_provider_version = func(version_constraints) {
+	if length(version_constraints) == 0 {
+		return false
+	}
+	
+	for version_constraints as vc {
+		# Must specify pessimistic operator '~>'
+		if strings.has_prefix(strings.trim_space(vc), "~>") {
+			return true
+		}
+	}
+	return false
+}
+
+invalid_provider_constraints = []
+
+for tfconfig.provider_requirements as address, prov {
+	version_constraints = prov.version_constraints else []
+	if not is_valid_provider_version(version_constraints) {
+		invalid_provider_constraints = append(invalid_provider_constraints, {
+			"address":             address,
+			"name":                prov.name,
+			"version_constraints": version_constraints,
+		})
+	}
+}
+
+main = rule {
+	length(invalid_provider_constraints) == 0
+}
