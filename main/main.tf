@@ -130,4 +130,14 @@ module "tfe" {
   log_fwd_destination_type        = var.log_fwd_destination_type
   log_analytics_workspace_name    = var.log_analytics_workspace_name
   log_analytics_workspace_rg_name = var.log_analytics_workspace_rg_name
+  create_event_hub                = var.create_event_hub
+  event_hub_rg_name               = var.event_hub_rg_name
+  event_hub_sku                   = var.event_hub_sku
+  event_hub_capacity              = var.event_hub_capacity
+  event_hub_partition_count       = var.event_hub_partition_count
+  event_hub_message_retention     = var.event_hub_message_retention
+  event_hub_namespace_name        = var.event_hub_namespace_name
+  event_hub_name                  = var.event_hub_name
+  event_hub_connection_string     = var.event_hub_connection_string
+  custom_fluent_bit_config        = var.custom_fluent_bit_config
 }

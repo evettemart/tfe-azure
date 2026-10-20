@@ -987,23 +987,23 @@ variable "tfe_log_forwarding_enabled" {
 
 variable "log_fwd_destination_type" {
   type        = string
-  description = "Type of log forwarding destination. Valid values are 'log_analytics' or 'custom'."
+  description = "Type of log forwarding destination. Valid values are 'log_analytics', 'event_hub', 'both' (log_analytics + event_hub), or 'custom'."
   default     = "log_analytics"
 
   validation {
-    condition     = contains(["log_analytics", "custom"], var.log_fwd_destination_type)
-    error_message = "Supported values are `log_analytics` or `custom`."
+    condition     = contains(["log_analytics", "event_hub", "both", "custom"], var.log_fwd_destination_type)
+    error_message = "Supported values are `log_analytics`, `event_hub`, `both`, or `custom`."
   }
 }
 
 variable "log_analytics_workspace_name" {
   type        = string
-  description = "Name existing Azure Log Analytics Workspace for log forwarding destination. Only valid if `log_fwd_destination_type` is `log_analytics`."
+  description = "Name of existing Azure Log Analytics Workspace for log forwarding destination. Required when `log_fwd_destination_type` is `log_analytics` or `both` (unless `create_log_analytics_workspace = true`)."
   default     = null
 
   validation {
-    condition     = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? var.log_analytics_workspace_name != null : true
-    error_message = "Value is required when `tfe_log_forwarding_enabled` is `true` and `log_fwd_destination_type` is `log_analytics`."
+    condition     = var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) && !var.create_log_analytics_workspace ? var.log_analytics_workspace_name != null : true
+    error_message = "Value is required when `tfe_log_forwarding_enabled` is `true`, `log_fwd_destination_type` is `log_analytics` or `both`, and `create_log_analytics_workspace` is `false`."
 
   }
 }
@@ -1014,8 +1014,78 @@ variable "log_analytics_workspace_rg_name" {
   default     = null
 
   validation {
-    condition     = var.log_fwd_destination_type == "log_analytics" && var.log_analytics_workspace_name != null ? var.log_analytics_workspace_rg_name != null : true
-    error_message = "Value is required when `log_fwd_destination_type` is `log_analytics` and `log_analytics_workspace_name` is not `null`."
+    condition     = contains(["log_analytics", "both"], var.log_fwd_destination_type) && var.log_analytics_workspace_name != null ? var.log_analytics_workspace_rg_name != null : true
+    error_message = "Value is required when `log_fwd_destination_type` is `log_analytics` or `both` and `log_analytics_workspace_name` is not `null`."
+  }
+}
+
+variable "create_event_hub" {
+  type        = bool
+  description = "Boolean to automatically create an Azure Event Hubs namespace and Event Hub topic for log forwarding."
+  default     = false
+}
+
+variable "event_hub_rg_name" {
+  type        = string
+  description = "Resource Group name for the Event Hub resources. Defaults to the TFE resource group if not specified."
+  default     = null
+}
+
+variable "event_hub_sku" {
+  type        = string
+  description = "Defines which tier to use for Event Hub Namespace. Valid options are Basic, Standard, and Premium."
+  default     = "Standard"
+}
+
+variable "event_hub_capacity" {
+  type        = number
+  description = "Specifies the Capacity / Throughput Units for a Standard SKU namespace."
+  default     = 1
+}
+
+variable "event_hub_partition_count" {
+  type        = number
+  description = "Specifies the current number of shards on the Event Hub. Must be between 1 and 32."
+  default     = 2
+}
+
+variable "event_hub_message_retention" {
+  type        = number
+  description = "Specifies the number of days to retain the events for this Event Hub. Must be between 1 and 7 days."
+  default     = 1
+}
+
+variable "event_hub_namespace_name" {
+  type        = string
+  description = "Name of the Azure Event Hubs namespace for log forwarding. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`."
+  default     = null
+
+  validation {
+    condition     = var.tfe_log_forwarding_enabled && contains(["event_hub", "both"], var.log_fwd_destination_type) && !var.create_event_hub ? var.event_hub_namespace_name != null : true
+    error_message = "Value is required when `tfe_log_forwarding_enabled` is `true`, `log_fwd_destination_type` is `event_hub` or `both`, and `create_event_hub` is `false`."
+  }
+}
+
+variable "event_hub_name" {
+  type        = string
+  description = "Name of the Azure Event Hub instance (topic) for log forwarding. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`."
+  default     = null
+
+  validation {
+    condition     = var.tfe_log_forwarding_enabled && contains(["event_hub", "both"], var.log_fwd_destination_type) && !var.create_event_hub ? var.event_hub_name != null : true
+    error_message = "Value is required when `tfe_log_forwarding_enabled` is `true`, `log_fwd_destination_type` is `event_hub` or `both`, and `create_event_hub` is `false`."
+  }
+}
+
+variable "event_hub_connection_string" {
+  type        = string
+  description = "Primary connection string for the Event Hub authorization rule. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`."
+  sensitive   = true
+  default     = null
+
+  validation {
+    condition     = var.tfe_log_forwarding_enabled && contains(["event_hub", "both"], var.log_fwd_destination_type) && !var.create_event_hub ? var.event_hub_connection_string != null : true
+    error_message = "Value is required when `tfe_log_forwarding_enabled` is `true`, `log_fwd_destination_type` is `event_hub` or `both`, and `create_event_hub` is `false`."
   }
 }
 

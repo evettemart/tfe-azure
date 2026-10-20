@@ -7,7 +7,7 @@
 # fall back to a data source lookup for pre-existing workspaces.
 #------------------------------------------------------------------------------
 data "azurerm_log_analytics_workspace" "logging" {
-  count = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" && !var.create_log_analytics_workspace ? 1 : 0
+  count = var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) && !var.create_log_analytics_workspace ? 1 : 0
 
   resource_group_name = var.log_analytics_workspace_rg_name == null ? local.resource_group_name : var.log_analytics_workspace_rg_name
   name                = var.log_analytics_workspace_name
@@ -16,14 +16,14 @@ data "azurerm_log_analytics_workspace" "logging" {
 locals {
   // Resolve workspace_id and access_key from either the managed resource or the data source
   log_analytics_workspace_id = (
-    var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
+    var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) ?
     (var.create_log_analytics_workspace ?
       azurerm_log_analytics_workspace.tfe[0].workspace_id :
     data.azurerm_log_analytics_workspace.logging[0].workspace_id)
     : null
   )
   log_analytics_access_key = (
-    var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ?
+    var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) ?
     (var.create_log_analytics_workspace ?
       azurerm_log_analytics_workspace.tfe[0].primary_shared_key :
     data.azurerm_log_analytics_workspace.logging[0].primary_shared_key)
@@ -35,13 +35,32 @@ locals {
     log_analytics_workspace_id = local.log_analytics_workspace_id
     log_analytics_access_key   = local.log_analytics_access_key
   }
-  fluent_bit_log_analytics_config = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "log_analytics" ? (templatefile("${path.module}/templates/fluent-bit-log-analytics.conf.tpl", local.fluent_bit_log_analytics_args)) : ""
+  fluent_bit_log_analytics_config = var.tfe_log_forwarding_enabled && contains(["log_analytics", "both"], var.log_fwd_destination_type) ? (templatefile("${path.module}/templates/fluent-bit-log-analytics.conf.tpl", local.fluent_bit_log_analytics_args)) : ""
+
+  // Resolve Event Hub parameters from managed resource or input variables
+  event_hub_namespace_name = (
+    var.create_event_hub ? azurerm_eventhub_namespace.tfe[0].name : var.event_hub_namespace_name
+  )
+  event_hub_name = (
+    var.create_event_hub ? azurerm_eventhub.tfe[0].name : var.event_hub_name
+  )
+  event_hub_connection_string = (
+    var.create_event_hub ? azurerm_eventhub_authorization_rule.fluent_bit[0].primary_connection_string : var.event_hub_connection_string
+  )
+
+  // Azure Event Hub destination
+  fluent_bit_event_hub_args = {
+    event_hub_namespace_name    = local.event_hub_namespace_name
+    event_hub_name              = local.event_hub_name
+    event_hub_connection_string = local.event_hub_connection_string
+  }
+  fluent_bit_event_hub_config = var.tfe_log_forwarding_enabled && contains(["event_hub", "both"], var.log_fwd_destination_type) ? (templatefile("${path.module}/templates/fluent-bit-event-hub.conf.tpl", local.fluent_bit_event_hub_args)) : ""
 
   // Custom destination
   fluent_bit_custom_config = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "custom" ? var.custom_fluent_bit_config : ""
 
   // Final rendered FluentBit config
-  fluent_bit_rendered_config = join("", [local.fluent_bit_log_analytics_config, local.fluent_bit_custom_config])
+  fluent_bit_rendered_config = join("", [local.fluent_bit_log_analytics_config, local.fluent_bit_event_hub_config, local.fluent_bit_custom_config])
 }
 
 #------------------------------------------------------------------------------
