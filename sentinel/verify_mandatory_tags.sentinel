@@ -1,0 +1,55 @@
+# Verification of the presence of mandatory tags
+# Validates that resource types across CSPs include mandatory organization tags.
+
+import "tfplan/v2" as tfplan
+
+# Define default mandatory tags (can be overridden via policy parameter per environment/CSP)
+param mandatory_tags default [
+	"Environment",
+	"Owner",
+	"Project",
+]
+
+# Supported tag attributes across providers
+tag_attribute_names = ["tags", "labels", "tags_all"]
+
+get_resource_tags = func(rc) {
+	values = rc.change.after else {}
+	if values is null {
+		return {}
+	}
+	
+	for tag_attribute_names as attr {
+		if attr in keys(values) and values[attr] is not null {
+			return values[attr]
+		}
+	}
+	return null
+}
+
+violating_resources = []
+
+for tfplan.resource_changes as address, rc {
+	# Only validate resources being created or updated
+	if rc.mode == "managed" and rc.change.actions contains "create" or rc.change.actions contains "update" {
+		tags = get_resource_tags(rc)
+		
+		# If the resource has a taggable field, check for presence of all mandatory tags
+		if tags is not null {
+			tag_keys = keys(tags)
+			for mandatory_tags as required_tag {
+				if required_tag not in tag_keys {
+					violating_resources = append(violating_resources, {
+						"address":     address,
+						"type":        rc.type,
+						"missing_tag": required_tag,
+					})
+				}
+			}
+		}
+	}
+}
+
+main = rule {
+	length(violating_resources) == 0
+}

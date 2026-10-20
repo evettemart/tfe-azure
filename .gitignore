@@ -53,7 +53,7 @@ module_generated_helm_overrides.yaml
 # Ignore local certificate files
 certs/
 
-# Ignore local environment and secret files
+# Local environment files
 .env
 .env.*
 !.env.example

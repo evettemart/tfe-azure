@@ -1,0 +1,27 @@
+# Verification of the presence of mandatory modules
+# Enforces the presence of standard project setting modules for each project/CSP.
+# Expected pattern: [approved-host]/[registry]/std_project_setting/(aws|google|azurerm)
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+param mandatory_module_pattern default "std_project_setting"
+param supported_csps default ["aws", "google", "azurerm"]
+
+has_mandatory_module = func() {
+	for tfconfig.module_calls as _, call {
+		source = call.source else ""
+		if strings.contains(source, "/" + mandatory_module_pattern + "/") {
+			for supported_csps as csp {
+				if strings.has_suffix(source, "/" + csp) or strings.contains(source, "/" + mandatory_module_pattern + "/" + csp) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+main = rule {
+	has_mandatory_module()
+}

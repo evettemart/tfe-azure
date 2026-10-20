@@ -1,0 +1,31 @@
+# Verification that module declarations include a version constraint
+# Ensures that all Terraform modules sourced from remote registries explicitly declare a version attribute.
+
+import "tfconfig/v2" as tfconfig
+import "strings"
+
+is_remote_module = func(source) {
+	if strings.has_prefix(source, "./") or strings.has_prefix(source, "../") {
+		return false
+	}
+	return true
+}
+
+modules_missing_version = []
+
+for tfconfig.module_calls as address, call {
+	if is_remote_module(call.source) {
+		version = call.version_constraint else ""
+		if version == "" or length(strings.trim_space(version)) == 0 {
+			modules_missing_version = append(modules_missing_version, {
+				"address": address,
+				"module":  call.name,
+				"source":  call.source,
+			})
+		}
+	}
+}
+
+main = rule {
+	length(modules_missing_version) == 0
+}
