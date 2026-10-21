@@ -1,0 +1,7 @@
+module_calls = {
+	"remote_mod": {
+		"name":               "remote_mod",
+		"source":             "tfe.windtre.it/org/mod/azurerm",
+		"version_constraint": ">= 1.2.3",
+	},
+}

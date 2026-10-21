@@ -16,6 +16,68 @@ This folder contains the complete Sentinel policy suite mapped directly to the o
 | 8 | **Terraform Outputs Presence** | [`verify_terraform_outputs_presence.sentinel`](verify_terraform_outputs_presence.sentinel) | Ensures that Terraform configurations define at least one output. | **Advisory** | `length(tfconfig.outputs) > 0` |
 | 9 | **No Direct Module-Covered Resources** | [`verify_no_direct_module_covered_resources.sentinel`](verify_no_direct_module_covered_resources.sentinel) | Prevents direct creation of resource types where a standard module is mandatory. | **Soft Mandatory** | Enforces usage of standard modules instead of direct resource blocks in root configuration. |
 
+## Testing Policies Locally
+
+Sentinel policies can be validated locally using the [Sentinel CLI](https://developer.hashicorp.com/sentinel/downloads) and the built-in unit testing framework.
+
+### Prerequisites
+Make sure the Sentinel CLI is installed on your machine:
+```bash
+sentinel version
+```
+
+### Running All Tests
+To run the complete test suite across all policies:
+
+```bash
+cd tfe-azure/sentinel
+sentinel test
+```
+*Or directly from the repository root:*
+```bash
+sentinel test tfe-azure/sentinel
+```
+
+### Running Tests for a Specific Policy
+Use the `-run=<policy_name>` flag to target a single policy:
+
+```bash
+# Test mandatory tags policy
+sentinel test -run=verify_mandatory_tags
+
+# Test authorized providers policy
+sentinel test -run=verify_authorized_providers
+
+# Test module sources policy
+sentinel test -run=verify_module_sources
+```
+
+### Verbose Mode
+To inspect detailed evaluation traces and see which rules passed or failed:
+
+```bash
+sentinel test -verbose
+```
+
+### Test Directory Structure
+Unit tests are located in `test/<policy_name>/` and consist of:
+- `pass.hcl` / `fail.hcl`: Test definitions with expected assertion results (`main = true` or `main = false`).
+- `mock-*.sentinel`: Mocked Terraform data (`tfconfig/v2`, `tfplan/v2`) representing positive and negative infrastructure scenarios.
+
+```text
+sentinel/
+├── sentinel.hcl
+├── verify_mandatory_tags.sentinel
+└── test/
+    └── verify_mandatory_tags/
+        ├── pass.hcl
+        ├── fail.hcl
+        ├── mock-tfplan-pass.sentinel
+        └── mock-tfplan-fail.sentinel
+```
+
+---
+
 ## Deployment into TFE
 
 You can link this folder directly as a **Policy Set** in your Terraform Enterprise Organization:

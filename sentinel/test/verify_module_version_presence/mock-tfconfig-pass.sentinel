@@ -1,0 +1,12 @@
+module_calls = {
+	"local_mod": {
+		"name":               "local_mod",
+		"source":             "./modules/networking",
+		"version_constraint": "",
+	},
+	"remote_mod": {
+		"name":               "remote_mod",
+		"source":             "tfe.windtre.it/org/mod/azurerm",
+		"version_constraint": "~> 1.0",
+	},
+}

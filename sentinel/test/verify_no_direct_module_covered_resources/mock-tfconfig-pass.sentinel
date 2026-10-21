@@ -1,0 +1,16 @@
+resources = {
+	"azurerm_resource_group.rg": {
+		"address":        "azurerm_resource_group.rg",
+		"module_address": "",
+		"mode":           "managed",
+		"name":           "rg",
+		"type":           "azurerm_resource_group",
+	},
+	"module.vm.azurerm_linux_virtual_machine.vm": {
+		"address":        "module.vm.azurerm_linux_virtual_machine.vm",
+		"module_address": "module.vm",
+		"mode":           "managed",
+		"name":           "vm",
+		"type":           "azurerm_linux_virtual_machine",
+	},
+}
