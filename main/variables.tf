@@ -7,7 +7,7 @@
 variable "image_factory_subscription_id" {
   type        = string
   description = "Subscription ID of the hashicorp02-image-factory-prod subscription hosting the shared image gallery."
-  default     = "3ce37cfd-e614-4570-8d11-015256bd51a4"
+  default     = "338f0fa5-b5ae-4847-9821-1808613db6c5"
 }
 
 #------------------------------------------------------------------------------

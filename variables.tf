@@ -517,10 +517,27 @@ variable "vm_os_image" {
   }
 }
 
+variable "vm_custom_image_name" {
+  type        = string
+  description = "Name of custom VM image to use for VMSS. If not using a custom image, leave this blank."
+  default     = null
+}
+
+variable "vm_custom_image_rg_name" {
+  type        = string
+  description = "Name of Resource Group where `vm_custom_image_name` image resides. Only valid if `vm_custom_image_name` is not `null`."
+  default     = null
+
+  validation {
+    condition     = var.vm_custom_image_name != null ? var.vm_custom_image_rg_name != null : true
+    error_message = "A value is required when `vm_custom_image_name` is not `null`."
+  }
+}
+
 variable "image_factory_subscription_id" {
   type        = string
   description = "Subscription ID of the hashicorp02-image-factory-prod subscription hosting the shared image gallery."
-  default     = "3ce37cfd-e614-4570-8d11-015256bd51a4"
+  default     = "338f0fa5-b5ae-4847-9821-1808613db6c5"
 }
 
 variable "custom_tfe_startup_script_template" {

@@ -17,7 +17,7 @@ for tfconfig.module_calls as address, call {
 	if is_remote_module(call.source) {
 		version = call.version_constraint else ""
 		if version == "" or length(strings.trim_space(version)) == 0 {
-			modules_missing_version = append(modules_missing_version, {
+			append(modules_missing_version, {
 				"address": address,
 				"module":  call.name,
 				"source":  call.source,

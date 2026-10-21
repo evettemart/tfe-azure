@@ -11,7 +11,7 @@ set -euo pipefail
 #------------------------------------------------------------------------------
 # Config — update these to match your deployment
 #------------------------------------------------------------------------------
-KEYVAULT_NAME="my-bootstrap-kv"
+KEYVAULT_NAME="em-bootstrap-kv"
 BOOTSTRAP_RG="bootstrap-keyvault-rg"
 LOCATION="centralus"
 FQDN="tfe.azure.example.com"

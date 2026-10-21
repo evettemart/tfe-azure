@@ -29,7 +29,7 @@ invalid_providers = []
 for tfconfig.provider_requirements as address, prov {
 	normalized = normalize_provider_source(prov.source)
 	if normalized not in approved_providers and prov.source not in approved_providers {
-		invalid_providers = append(invalid_providers, {
+		append(invalid_providers, {
 			"address": address,
 			"name":    prov.name,
 			"source":  prov.source,

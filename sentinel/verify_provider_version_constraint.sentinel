@@ -25,7 +25,7 @@ invalid_provider_constraints = []
 for tfconfig.provider_requirements as address, prov {
 	version_constraints = prov.version_constraints else []
 	if not is_valid_provider_version(version_constraints) {
-		invalid_provider_constraints = append(invalid_provider_constraints, {
+		append(invalid_provider_constraints, {
 			"address":             address,
 			"name":                prov.name,
 			"version_constraints": version_constraints,
