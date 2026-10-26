@@ -1096,35 +1096,59 @@ variable "custom_fluent_bit_config" {
 }
 
 #------------------------------------------------------------------------------
-# Windows bastion host
+# Ubuntu bastion host
 #------------------------------------------------------------------------------
-variable "create_windows_bastion" {
+variable "create_ubuntu_bastion" {
   type        = bool
-  description = "Boolean to create a Windows Server 2025 bastion VM with a public IP and Google Chrome pre-installed."
+  description = "Boolean to create an Ubuntu bastion VM with a public IP, an XFCE desktop (xrdp) and Google Chrome."
   default     = false
 }
 
-variable "windows_bastion_vm_size" {
+variable "ubuntu_bastion_image_name" {
   type        = string
-  description = "Azure VM size (SKU) for the Windows bastion host."
+  description = "Name of the shared image definition in the `hcbaseGallery` image gallery to use for the Ubuntu bastion."
+  default     = "hc-base-ubuntu-2404-amd64"
+}
+
+variable "ubuntu_bastion_vm_size" {
+  type        = string
+  description = "Azure VM size (SKU) for the Ubuntu bastion host."
   default     = "Standard_D2s_v3"
 }
 
-variable "windows_bastion_admin_username" {
+variable "ubuntu_bastion_admin_username" {
   type        = string
-  description = "Local administrator username for the Windows bastion VM."
+  description = "Admin username for the Ubuntu bastion VM."
   default     = "bastionadmin"
 }
 
-variable "windows_bastion_admin_password" {
+variable "ubuntu_bastion_admin_password" {
   type        = string
-  description = "Local administrator password for the Windows bastion VM."
+  description = "Admin password for the Ubuntu bastion VM, used for the xrdp login."
   sensitive   = true
   default     = null
 }
 
-variable "windows_bastion_allowed_cidrs" {
+variable "ubuntu_bastion_ssh_public_key" {
+  type        = string
+  description = "Optional SSH public key added to the Ubuntu bastion admin user."
+  default     = null
+}
+
+variable "ubuntu_bastion_run_setup_script" {
+  type        = bool
+  description = "Boolean to run the setup script automatically on first boot of the Ubuntu bastion. Set to `false` to create the VM only."
+  default     = true
+}
+
+variable "ubuntu_bastion_tfe_hosts_ip" {
+  type        = string
+  description = "IP address the Ubuntu bastion maps the TFE FQDN to. When null, the load balancer IP is used."
+  default     = null
+}
+
+variable "ubuntu_bastion_allowed_cidrs" {
   type        = list(string)
-  description = "List of CIDR ranges allowed RDP access (port 3389) to the Windows bastion VM."
+  description = "List of CIDR ranges allowed RDP (3389) and SSH (22) access to the Ubuntu bastion VM."
   default     = []
 }

@@ -1116,47 +1116,76 @@ variable "create_workbook" {
 }
 
 #------------------------------------------------------------------------------
-# Windows bastion host
+# Ubuntu bastion host
 #------------------------------------------------------------------------------
-variable "create_windows_bastion" {
+variable "create_ubuntu_bastion" {
   type        = bool
-  description = "Boolean to create a Windows Server 2025 bastion VM with a public IP and Google Chrome pre-installed. Useful for accessing the TFE UI from a browser when the load balancer has no public DNS or when running in a restricted network."
+  description = "Boolean to create an Ubuntu bastion VM with a public IP, an XFCE desktop (xrdp) and Google Chrome, for opening the TFE UI in a graphical browser."
   default     = false
 }
 
-variable "windows_bastion_vm_size" {
+variable "ubuntu_bastion_image_name" {
   type        = string
-  description = "Azure VM size (SKU) for the Windows bastion host."
+  description = "Name of the shared image definition in the `hcbaseGallery` image gallery to use for the Ubuntu bastion."
+  default     = "hc-base-ubuntu-2404-amd64"
+}
+
+variable "ubuntu_bastion_vm_size" {
+  type        = string
+  description = "Azure VM size (SKU) for the Ubuntu bastion host. A desktop and browser need roughly 2+ vCPU and 8 GB+ RAM."
   default     = "Standard_D2s_v3"
 }
 
-variable "windows_bastion_admin_username" {
+variable "ubuntu_bastion_admin_username" {
   type        = string
-  description = "Local administrator username for the Windows bastion VM."
+  description = "Admin username for the Ubuntu bastion VM. Used for SSH and for the xrdp login."
   default     = "bastionadmin"
 }
 
-variable "windows_bastion_admin_password" {
+variable "ubuntu_bastion_admin_password" {
   type        = string
-  description = "Local administrator password for the Windows bastion VM. Must meet Azure complexity requirements (12+ chars, upper, lower, digit, special). Recommended: supply via the TF_VAR_windows_bastion_admin_password environment variable rather than in tfvars."
+  description = "Admin password for the Ubuntu bastion VM, used for the xrdp login. Must meet Azure complexity requirements (12+ chars, upper, lower, digit, special). Recommended: supply via the TF_VAR_ubuntu_bastion_admin_password environment variable rather than in tfvars."
   sensitive   = true
   default     = null
   nullable    = true
+
+  validation {
+    condition     = var.create_ubuntu_bastion ? var.ubuntu_bastion_admin_password != null : true
+    error_message = "`ubuntu_bastion_admin_password` must be set when `create_ubuntu_bastion` is `true`."
+  }
 }
 
-variable "windows_bastion_allowed_cidrs" {
+variable "ubuntu_bastion_ssh_public_key" {
+  type        = string
+  description = "Optional SSH public key added to the Ubuntu bastion admin user for SSH access."
+  default     = null
+}
+
+variable "ubuntu_bastion_run_setup_script" {
+  type        = bool
+  description = "Boolean to run the desktop/xrdp/Chrome setup script automatically on first boot of the Ubuntu bastion. Set to `false` to create the VM only and run `templates/ubuntu_bastion_setup.sh.tpl` manually."
+  default     = true
+}
+
+variable "ubuntu_bastion_tfe_hosts_ip" {
+  type        = string
+  description = "IP address the Ubuntu bastion maps `tfe_fqdn` to in /etc/hosts. When null, the load balancer IP is used (public IP, or `lb_private_ip` when the load balancer is internal)."
+  default     = null
+}
+
+variable "ubuntu_bastion_allowed_cidrs" {
   type        = list(string)
-  description = "List of CIDR ranges allowed to connect to the Windows bastion host over RDP (port 3389). Set this to your Mac's public IP, e.g. [\"1.2.3.4/32\"]."
+  description = "List of CIDR ranges allowed to connect to the Ubuntu bastion host over RDP (port 3389) and SSH (port 22). Set this to your public IP, e.g. [\"1.2.3.4/32\"]."
   default     = []
 
   validation {
-    condition     = var.create_windows_bastion ? length(var.windows_bastion_allowed_cidrs) > 0 : true
-    error_message = "At least one CIDR must be provided in `windows_bastion_allowed_cidrs` when `create_windows_bastion` is `true`."
+    condition     = var.create_ubuntu_bastion ? length(var.ubuntu_bastion_allowed_cidrs) > 0 : true
+    error_message = "At least one CIDR must be provided in `ubuntu_bastion_allowed_cidrs` when `create_ubuntu_bastion` is `true`."
   }
 
   validation {
     condition = alltrue([
-      for cidr in var.windows_bastion_allowed_cidrs : can(cidrhost(cidr, 0))
+      for cidr in var.ubuntu_bastion_allowed_cidrs : can(cidrhost(cidr, 0))
     ])
     error_message = "All values must be valid CIDR notation."
   }

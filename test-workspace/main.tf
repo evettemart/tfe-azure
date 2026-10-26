@@ -4,7 +4,7 @@ terraform {
     organization = "<YOUR-ORG-NAME>"
 
     workspaces {
-      name = "test-random-string"
+      name = "tf-demo-workspace"
     }
   }
 

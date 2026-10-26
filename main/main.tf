@@ -87,12 +87,16 @@ module "tfe" {
   private_dns_zone_name         = var.private_dns_zone_name
   private_dns_zone_rg_name      = var.private_dns_zone_rg_name
 
-  # --- Windows bastion (optional) --- #
-  create_windows_bastion         = var.create_windows_bastion
-  windows_bastion_vm_size        = var.windows_bastion_vm_size
-  windows_bastion_admin_username = var.windows_bastion_admin_username
-  windows_bastion_admin_password = var.windows_bastion_admin_password
-  windows_bastion_allowed_cidrs  = var.windows_bastion_allowed_cidrs
+  # --- Ubuntu bastion (optional) --- #
+  create_ubuntu_bastion           = var.create_ubuntu_bastion
+  ubuntu_bastion_image_name       = var.ubuntu_bastion_image_name
+  ubuntu_bastion_vm_size          = var.ubuntu_bastion_vm_size
+  ubuntu_bastion_admin_username   = var.ubuntu_bastion_admin_username
+  ubuntu_bastion_admin_password   = var.ubuntu_bastion_admin_password
+  ubuntu_bastion_ssh_public_key   = var.ubuntu_bastion_ssh_public_key
+  ubuntu_bastion_run_setup_script = var.ubuntu_bastion_run_setup_script
+  ubuntu_bastion_tfe_hosts_ip     = var.ubuntu_bastion_tfe_hosts_ip
+  ubuntu_bastion_allowed_cidrs    = var.ubuntu_bastion_allowed_cidrs
 
   image_factory_subscription_id = var.image_factory_subscription_id
 

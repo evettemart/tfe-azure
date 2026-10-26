@@ -31,9 +31,9 @@ output "tfe_object_storage_azure_container_name" {
   description = "Name of TFE Azure Storage Container."
 }
 
-output "windows_bastion_public_ip" {
-  value       = module.tfe.windows_bastion_public_ip
-  description = "Public IP address of the Windows bastion VM. Use this to open an RDP session from your Mac."
+output "ubuntu_bastion_public_ip" {
+  value       = module.tfe.ubuntu_bastion_public_ip
+  description = "Public IP address of the Ubuntu bastion VM. Use this to open an RDP (xrdp) or SSH session from your Mac."
 }
 
 output "public_dns_zone_name_servers" {

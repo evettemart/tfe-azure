@@ -1,3 +1,7 @@
+# --- Image factory --- #
+# Subscription hosting the `hcbaseGallery` shared image gallery (used by the Ubuntu bastion). Default shown.
+# image_factory_subscription_id = "338f0fa5-b5ae-4847-9821-1808613db6c5"
+
 # --- Common --- #
 create_resource_group = <true>
 resource_group_name   = "<tfe-resource-group-name>"
@@ -34,7 +38,21 @@ tfe_admin_https_port     = <9443>
 tfe_admin_console_disabled = <true>
 cidr_allow_ingress_tfe_admin_console = ["<10.0.0.0/24>"] # required when `tfe_admin_console_disabled` is false; enforce this in your prereqs NSGs/firewalls
 
-# --- Networking --- #
+# --- Networking (module-created) --- #
+# Set create_networking_resources = true to have the module create the VNet, subnets and Azure Bastion;
+# vnet_id and the *_subnet_id values below are then not needed (only lb_is_internal / lb_private_ip).
+# create_networking_resources    = <true>
+# networking_resource_group_name = "<tfe-networking-rg>"
+# vnet_name                      = "<tfe-vnet>"
+# vnet_address_space             = "<10.0.0.0/16>"
+# lb_subnet_cidr                 = "<10.0.1.0/24>"
+# vm_subnet_cidr                 = "<10.0.2.0/24>"
+# db_subnet_cidr                 = "<10.0.3.0/24>"
+# redis_subnet_cidr              = "<10.0.4.0/24>"
+# create_bastion_host            = <true>
+# bastion_subnet_cidr            = "<10.0.5.0/26>"
+
+# --- Networking (existing; required when create_networking_resources = false) --- #
 vnet_id         = "<tfe-vnet-id>"
 lb_subnet_id    = "<tfe-load-balancer-subnet-id>"
 lb_is_internal  = <true>
@@ -74,6 +92,7 @@ postgres_sku                               = "<GP_Standard_D4ds_v4>"
 storage_account_ip_allow = ["<192.168.1.20>"] # client/workstation you are running Terraform from (no subnet mask)
 
 # --- Log forwarding (optional) --- #
+# create_log_analytics_workspace = <true> # have the module create the workspace and its resource group
 tfe_log_forwarding_enabled      = <true>
 log_fwd_destination_type        = "<log_analytics>" # "log_analytics", "event_hub", "both", or "custom"
 log_analytics_workspace_name    = "<tfeloganalyticsworkspacename>"
@@ -86,3 +105,14 @@ log_analytics_workspace_rg_name = "<tfe-log-analytics-resource-group-name>"
 # --- Dashboard & Workbook (optional) --- #
 create_dashboard = <true>
 create_workbook  = <true>
+
+# --- Ubuntu bastion (optional) --- #
+# create_ubuntu_bastion           = <true>
+# ubuntu_bastion_allowed_cidrs    = ["<your-public-ip>/32"] # curl -s ifconfig.me
+# ubuntu_bastion_image_name       = "hc-base-ubuntu-2404-amd64"
+# ubuntu_bastion_vm_size          = "Standard_D2s_v3"       # use another size if SkuNotAvailable in your region
+# ubuntu_bastion_admin_username   = "bastionadmin"
+# ubuntu_bastion_ssh_public_key   = "<ssh-ed25519 AAAA...>" # optional, for SSH key login
+# ubuntu_bastion_tfe_hosts_ip     = "<TFE-VM-IP>"           # default: load balancer IP
+# ubuntu_bastion_run_setup_script = <false>                 # true (default) runs the setup script on first boot; false creates the VM only
+# Set the password with: export TF_VAR_ubuntu_bastion_admin_password="<password>"

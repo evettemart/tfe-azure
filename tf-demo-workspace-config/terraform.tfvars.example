@@ -1,0 +1,43 @@
+# Copyright IBM Corp. 2024, 2026
+# SPDX-License-Identifier: MPL-2.0
+
+# Copy to terraform.tfvars. Secrets (teams_webhook_url, smtp_password) should be
+# supplied via TF_VAR_* environment variables, not written to this file.
+# The TFE API token is read from the TFE_TOKEN environment variable.
+
+tfe_hostname     = "tfe.azure.example.com"
+tfe_organization = "<YOUR-ORG-NAME>" # must already exist
+
+# --- Workspace (always created) --- #
+workspace_name = "tf-demo-workspace" # matches test-workspace/main.tf
+# workspace_description       = "Demo workspace used to verify the TFE deployment."
+# workspace_auto_apply        = false
+# workspace_terraform_version = "1.9.8" # TFE 1.0.1 is incompatible with CLI >= 1.10
+# workspace_assessments_enabled = true  # health assessments (drift detection / continuous validation); default true
+
+# --- Notifications master flag --- #
+# When false, no notification or SMTP resources are created. The workspace is still created.
+enable_notifications = false
+
+# Events that trigger a notification (Teams and email).
+notification_triggers = ["run:needs_attention", "run:errored"]
+
+# --- Microsoft Teams --- #
+enable_teams_notifications = false
+# export TF_VAR_teams_webhook_url="https://..."
+
+# --- Email --- #
+enable_email_notifications = false
+email_addresses            = [] # e.g. ["platform-team@example.com"]
+
+# --- SMTP (TFE cannot send email until this is configured) --- #
+# Set configure_smtp = true to have Terraform manage TFE's SMTP settings, or leave
+# it false if an admin has already configured SMTP in TFE.
+configure_smtp = false
+# smtp_host     = "smtp.example.com"
+# smtp_port     = 587
+# smtp_sender   = "tfe-noreply@example.com"
+# smtp_auth     = "login"  # none, plain or login
+# smtp_username = "<smtp-user>"
+# export TF_VAR_smtp_password="..."
+# smtp_password_version = 1  # increment when the password changes

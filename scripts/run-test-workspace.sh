@@ -3,13 +3,15 @@
 # run-test-workspace.sh
 #
 # Copies the test-workspace Terraform config to the TFE VM via the Azure
-# Bastion tunnel and runs terraform init + apply on the VM.
+# Bastion tunnel and runs terraform init + plan or apply on the VM.
 #
 # Run from the repo root:
 #   export SSH_KEY=~/.ssh/<private-key>
 #   export TFE_ORG=<your-org-name>
 #   export TFE_TOKEN=<your-tfe-user-api-token>
-#   bash tfe-azure/scripts/run-test-workspace.sh
+#   bash tfe-azure/scripts/run-test-workspace.sh          # init + apply (default)
+#   bash tfe-azure/scripts/run-test-workspace.sh plan     # init + plan only, creates nothing
+#   bash tfe-azure/scripts/run-test-workspace.sh apply    # same as the default
 #
 # How to get a TFE_TOKEN:
 #   1. Log in to https://tfe.azure.example.com in a browser
@@ -34,7 +36,8 @@ VMSS_NAME="em-tfe-vmss"
 VM_ADMIN="tfeadmin"
 TFE_HOSTNAME="tfe.azure.example.com"
 TUNNEL_PORT="${TUNNEL_PORT:-2222}"
-WORKSPACE_NAME="test-random-string"
+WORKSPACE_NAME="tf-demo-workspace"
+ACTION="${1:-apply}"
 LOCAL_WORKSPACE_DIR="$(cd "$(dirname "$0")/../test-workspace" && pwd)"
 
 SSH_KEY="${SSH_KEY:?ERROR: SSH_KEY is not set. Run: export SSH_KEY=~/.ssh/<private-key>}"
@@ -52,6 +55,11 @@ warn() { echo -e "${YELLOW}[run-test]${NC} $*"; }
 die()  { echo -e "${RED}[run-test] ERROR${NC} $*" >&2; exit 1; }
 
 # ---- Checks ----
+case "$ACTION" in
+  plan|apply) ;;
+  *) die "Unknown action '$ACTION'. Use: plan or apply (default)." ;;
+esac
+
 for cmd in az ssh scp; do
   command -v "$cmd" &>/dev/null || die "'$cmd' is not installed."
 done
@@ -166,16 +174,24 @@ printf '{"credentials":{"%s":{"token":"%s"}}}\n' "$TFE_HOSTNAME" "$TFE_TOKEN" \
   || die "Failed to write credentials file on VM."
 log "Credentials file written."
 
-# ---- Run terraform init and apply ----
+# ---- Run terraform init, then plan or apply ----
 log "Running terraform init..."
 ssh -o StrictHostKeyChecking=no \
     -p "$TUNNEL_PORT" -i "$SSH_KEY" "$VM_ADMIN@127.0.0.1" \
     "cd /home/$VM_ADMIN/test-workspace && terraform init"
 
-log "Running terraform apply..."
-ssh -o StrictHostKeyChecking=no \
-    -p "$TUNNEL_PORT" -i "$SSH_KEY" "$VM_ADMIN@127.0.0.1" \
-    "cd /home/$VM_ADMIN/test-workspace && terraform apply -auto-approve"
+if [[ "$ACTION" == "plan" ]]; then
+  log "Running terraform plan (no changes will be applied)..."
+  ssh -o StrictHostKeyChecking=no \
+      -p "$TUNNEL_PORT" -i "$SSH_KEY" "$VM_ADMIN@127.0.0.1" \
+      "cd /home/$VM_ADMIN/test-workspace && terraform plan"
+  log "Plan only. To apply: bash tfe-azure/scripts/run-test-workspace.sh apply"
+else
+  log "Running terraform apply..."
+  ssh -o StrictHostKeyChecking=no \
+      -p "$TUNNEL_PORT" -i "$SSH_KEY" "$VM_ADMIN@127.0.0.1" \
+      "cd /home/$VM_ADMIN/test-workspace && terraform apply -auto-approve"
+fi
 
 log "Done. Check the TFE UI at https://$TFE_HOSTNAME for the run results."
 log "Workspace: $WORKSPACE_NAME | Org: $TFE_ORG"
