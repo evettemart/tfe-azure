@@ -75,9 +75,13 @@ storage_account_ip_allow = ["<192.168.1.20>"] # client/workstation you are runni
 
 # --- Log forwarding (optional) --- #
 tfe_log_forwarding_enabled      = <true>
-log_fwd_destination_type        = "<log_analytics>"
+log_fwd_destination_type        = "<log_analytics>" # "log_analytics", "event_hub", "both", or "custom"
 log_analytics_workspace_name    = "<tfeloganalyticsworkspacename>"
 log_analytics_workspace_rg_name = "<tfe-log-analytics-resource-group-name>"
+# create_event_hub                = <true>
+# event_hub_namespace_name        = "<eventhub-namespace-name>"
+# event_hub_name                  = "<eventhub-name>"
+# event_hub_connection_string     = "<eventhub-primary-connection-string>"
 
 # --- Dashboard & Workbook (optional) --- #
 create_dashboard = <true>

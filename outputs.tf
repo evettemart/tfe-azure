@@ -38,6 +38,19 @@ output "workbook_url" {
   description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
 }
 
+#------------------------------------------------------------------------------
+# Event Hub
+#------------------------------------------------------------------------------
+output "event_hub_namespace_id" {
+  value       = var.create_event_hub ? azurerm_eventhub_namespace.tfe[0].id : null
+  description = "The ID of the Azure Event Hubs namespace created for TFE log forwarding."
+}
+
+output "event_hub_id" {
+  value       = var.create_event_hub ? azurerm_eventhub.tfe[0].id : null
+  description = "The ID of the Azure Event Hub topic created for TFE log forwarding."
+}
+
 output "tfe_admin_console_url_pattern" {
   value       = !var.tfe_admin_console_disabled ? "https://${var.tfe_fqdn}:${var.tfe_admin_https_port}" : null
   description = "URL pattern to access the TFE Admin Console when it is enabled."
