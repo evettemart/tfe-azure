@@ -56,6 +56,33 @@ variable "workspace_assessments_enabled" {
 }
 
 #------------------------------------------------------------------------------
+# Sentinel policy set
+#------------------------------------------------------------------------------
+variable "enable_policy_set" {
+  type        = bool
+  description = "Create a Sentinel policy set from the policies in `policy_set_source_path` and enable it on the workspace. When false, no policy set resources are created."
+  default     = true
+}
+
+variable "policy_set_name" {
+  type        = string
+  description = "Name of the policy set."
+  default     = "tfe-azure-sentinel"
+}
+
+variable "policy_set_description" {
+  type        = string
+  description = "Description of the policy set."
+  default     = "Sentinel policies from tfe-azure/sentinel."
+}
+
+variable "policy_set_source_path" {
+  type        = string
+  description = "Folder containing sentinel.hcl and the policy files. Relative paths are resolved from the directory Terraform is run in (this folder)."
+  default     = "../sentinel"
+}
+
+#------------------------------------------------------------------------------
 # Notifications master flag
 #------------------------------------------------------------------------------
 variable "enable_notifications" {

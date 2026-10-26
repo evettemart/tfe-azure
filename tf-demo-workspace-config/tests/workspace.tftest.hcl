@@ -47,6 +47,38 @@ run "health_assessments_can_be_disabled" {
   }
 }
 
+run "policy_set_is_created_and_enabled_on_workspace_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_policy_set.this) == 1 && length(tfe_workspace_policy_set.this) == 1
+    error_message = "A policy set and its workspace assignment must be created by default."
+  }
+
+  assert {
+    condition     = tfe_policy_set.this[0].kind == "sentinel" && tfe_policy_set.this[0].global == false && tfe_policy_set.this[0].organization == "org"
+    error_message = "The policy set must be a non-global Sentinel policy set in the given organization."
+  }
+}
+
+run "policy_set_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_policy_set = false
+  }
+
+  assert {
+    condition     = length(tfe_policy_set.this) == 0 && length(tfe_workspace_policy_set.this) == 0
+    error_message = "enable_policy_set = false must create no policy set resources."
+  }
+
+  assert {
+    condition     = tfe_workspace.this.name == "tf-demo-workspace"
+    error_message = "The workspace must still be created when the policy set is off."
+  }
+}
+
 run "workspace_name_is_configurable" {
   command = plan
 

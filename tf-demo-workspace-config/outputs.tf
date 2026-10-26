@@ -11,6 +11,16 @@ output "workspace_url" {
   description = "URL of the created workspace in the TFE UI."
 }
 
+output "policy_set_id" {
+  value       = one(tfe_policy_set.this[*].id)
+  description = "ID of the Sentinel policy set, or null when `enable_policy_set` is false."
+}
+
+output "policy_set_enabled_on_workspace" {
+  value       = length(tfe_workspace_policy_set.this) > 0
+  description = "Whether the Sentinel policy set is enabled on the workspace."
+}
+
 output "teams_notification_enabled" {
   value       = length(tfe_notification_configuration.teams) > 0
   description = "Whether a Microsoft Teams notification is configured on the workspace."

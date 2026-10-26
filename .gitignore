@@ -58,3 +58,6 @@ certs/
 .env.*
 !.env.example
 !.env.*.example
+
+# Created by `sentinel test`
+sentinel/.sentinel/

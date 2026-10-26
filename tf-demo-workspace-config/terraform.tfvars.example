@@ -15,6 +15,13 @@ workspace_name = "tf-demo-workspace" # matches test-workspace/main.tf
 # workspace_terraform_version = "1.9.8" # TFE 1.0.1 is incompatible with CLI >= 1.10
 # workspace_assessments_enabled = true  # health assessments (drift detection / continuous validation); default true
 
+# --- Sentinel policy set --- #
+# Uploads the policies in ../sentinel as a policy set and enables it on the workspace.
+enable_policy_set = true
+# policy_set_name        = "tfe-azure-sentinel"
+# policy_set_description = "Sentinel policies from tfe-azure/sentinel."
+# policy_set_source_path = "../sentinel" # folder containing sentinel.hcl
+
 # --- Notifications master flag --- #
 # When false, no notification or SMTP resources are created. The workspace is still created.
 enable_notifications = false
