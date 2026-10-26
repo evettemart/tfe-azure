@@ -40,7 +40,7 @@ warn() { echo -e "${YELLOW}[deploy-tfe]${NC} $*"; }
 die()  { echo -e "${RED}[deploy-tfe] ERROR${NC} $*" >&2; exit 1; }
 
 # ---- Checks ----
-for cmd in terraform az jq ssh scp; do
+for cmd in terraform az jq ssh scp lsof; do
   command -v "$cmd" &>/dev/null || die "'$cmd' is not installed."
 done
 
@@ -72,6 +72,25 @@ head -1 "$SCRIPT_TMP" | grep -q "bash\|cloud-boothook" || \
   die "Extracted script doesn't look right. Check Terraform state."
 
 log "Script extracted to $SCRIPT_TMP ($(wc -l < "$SCRIPT_TMP") lines)"
+
+# ---- Check the tunnel port is free ----
+if lsof -nP -iTCP:"$TUNNEL_PORT" -sTCP:LISTEN &>/dev/null; then
+  warn "Port $TUNNEL_PORT is already in use by:"
+  lsof -nP -iTCP:"$TUNNEL_PORT" -sTCP:LISTEN
+  echo ""
+  [[ -t 0 ]] || die "Port $TUNNEL_PORT is in use. Free it or set TUNNEL_PORT=<other port>."
+  read -r -p "Do you want to kill the process(es) using port $TUNNEL_PORT? [y/N] " KILL_REPLY
+  if [[ "$KILL_REPLY" =~ ^[Yy]$ ]]; then
+    lsof -nP -tiTCP:"$TUNNEL_PORT" -sTCP:LISTEN | xargs kill
+    sleep 2
+    if lsof -nP -iTCP:"$TUNNEL_PORT" -sTCP:LISTEN &>/dev/null; then
+      die "Port $TUNNEL_PORT is still in use after kill. Try: kill -9 \$(lsof -nP -tiTCP:$TUNNEL_PORT -sTCP:LISTEN)"
+    fi
+    log "Port $TUNNEL_PORT is now free."
+  else
+    die "Port $TUNNEL_PORT is in use. Free it or set TUNNEL_PORT=<other port>."
+  fi
+fi
 
 # ---- Open Bastion tunnel ----
 log "Opening Bastion tunnel on port $TUNNEL_PORT..."
