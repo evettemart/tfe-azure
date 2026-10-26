@@ -30,6 +30,36 @@ resource "tfe_workspace" "this" {
 }
 
 #------------------------------------------------------------------------------
+# Sentinel policy set
+# The folder at `policy_set_source_path` (sentinel/ in this repo) is uploaded
+# as-is. Its sentinel.hcl defines the policies and their enforcement levels.
+# The policy set is not global; it is enabled only on the workspace above.
+#------------------------------------------------------------------------------
+data "tfe_slug" "policy_set" {
+  count = var.enable_policy_set ? 1 : 0
+
+  source_path = var.policy_set_source_path
+}
+
+resource "tfe_policy_set" "this" {
+  count = var.enable_policy_set ? 1 : 0
+
+  organization = var.tfe_organization
+  name         = var.policy_set_name
+  description  = var.policy_set_description
+  kind         = "sentinel"
+  global       = false
+  slug         = data.tfe_slug.policy_set[0]
+}
+
+resource "tfe_workspace_policy_set" "this" {
+  count = var.enable_policy_set ? 1 : 0
+
+  policy_set_id = tfe_policy_set.this[0].id
+  workspace_id  = tfe_workspace.this.id
+}
+
+#------------------------------------------------------------------------------
 # SMTP settings (optional) - required for email notifications to be delivered
 #------------------------------------------------------------------------------
 resource "tfe_admin_smtp_settings" "this" {

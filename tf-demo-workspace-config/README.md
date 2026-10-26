@@ -11,6 +11,8 @@ Notifications are off by default. The workspace is created either way.
 | Resource | When |
 |---|---|
 | `tfe_workspace` | Always. |
+| `tfe_policy_set` | `enable_policy_set` is true (default). Sentinel, not global, built from `policy_set_source_path`. |
+| `tfe_workspace_policy_set` | `enable_policy_set` is true. Enables the policy set on the workspace only. |
 | `tfe_notification_configuration` (Teams) | `enable_notifications` and `enable_teams_notifications` are both true. |
 | `tfe_notification_configuration` (email) | `enable_notifications` and `enable_email_notifications` are both true. |
 | `tfe_admin_smtp_settings` | Email is enabled and `configure_smtp` is true. |
@@ -35,6 +37,22 @@ Notifications are off by default. The workspace is created either way.
 | `workspace_auto_apply` | `false` | Apply automatically after a successful plan. |
 | `workspace_terraform_version` | `null` | Terraform version or constraint. When `null`, the provider default (latest available) is used. |
 | `workspace_assessments_enabled` | `true` | Turn on health assessments (drift detection and continuous validation). Set `false` to turn them off. |
+
+## Sentinel policy set
+
+The folder `policy_set_source_path` (default `../sentinel`) is packaged with the `tfe_slug` data source and uploaded as the policy set. Its `sentinel.hcl` defines the nine policies and their enforcement levels (hard-mandatory, soft-mandatory, advisory); see the [Sentinel README](../sentinel/README.md). The policy set is not global, so it applies only to the workspace created here.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `policy_set_name` | `tfe-azure-sentinel` | Name of the policy set. |
+| `policy_set_description` | `Sentinel policies from tfe-azure/sentinel.` | Description. |
+| `policy_set_source_path` | `../sentinel` | Folder containing `sentinel.hcl` and the `.sentinel` files. |
+
+> The whole folder is uploaded, including `test/`.
+>
+> `verify_module_sources` is **hard-mandatory** and only allows modules from the `tfe.windtre.it` / `tfe.azu.windtre.it` registries (or local `./` paths). A run in this workspace that calls a module from anywhere else fails with no override.
+>
+> The policies only take effect on runs in the workspace. Check the result on a run's **Policy check** step.
 
 ## Email needs SMTP
 
@@ -94,7 +112,7 @@ terraform test
 
 > `terraform test` also loads `terraform.tfvars` from this folder, and the tests assume the defaults (everything off). If your `terraform.tfvars` enables notifications, some tests fail for that reason. Move it aside while testing: `mv terraform.tfvars /tmp/ && terraform test; mv /tmp/terraform.tfvars .`
 
-They check that the workspace is always created, that the master flag creates no notification resources when off, that each destination is created only when enabled, that SMTP is only managed when email is on, and that the input validation rules reject bad values.
+They check that the workspace is always created, that the policy set is created and enabled on it by default (and can be turned off), that the master flag creates no notification resources when off, that each destination is created only when enabled, that SMTP is only managed when email is on, and that the input validation rules reject bad values.
 
 ## Not covered
 
