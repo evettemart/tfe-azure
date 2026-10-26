@@ -1,0 +1,7 @@
+provider_requirements = {
+	"azurerm": {
+		"name":                "azurerm",
+		"source":              "hashicorp/azurerm",
+		"version_constraints": [">= 4.0"],
+	},
+}

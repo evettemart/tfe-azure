@@ -1,0 +1,7 @@
+module_calls = {
+	"unapproved_mod": {
+		"name":               "unapproved_mod",
+		"source":             "registry.terraform.io/unapproved/mod/azurerm",
+		"version_constraint": "~> 1.0",
+	},
+}

@@ -1,0 +1,7 @@
+provider_requirements = {
+	"unapproved": {
+		"name":                "unapproved",
+		"source":              "untrusted/custom-provider",
+		"version_constraints": ["~> 1.0"],
+	},
+}

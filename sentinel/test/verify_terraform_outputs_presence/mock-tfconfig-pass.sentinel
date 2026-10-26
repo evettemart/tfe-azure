@@ -1,0 +1,7 @@
+outputs = {
+	"url": {
+		"name":        "url",
+		"description": "TFE URL",
+		"sensitive":   false,
+	},
+}

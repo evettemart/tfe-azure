@@ -11,9 +11,9 @@ param supported_csps default ["aws", "google", "azurerm"]
 has_mandatory_module = func() {
 	for tfconfig.module_calls as _, call {
 		source = call.source else ""
-		if strings.contains(source, "/" + mandatory_module_pattern + "/") {
+		if source contains ("/" + mandatory_module_pattern + "/") {
 			for supported_csps as csp {
-				if strings.has_suffix(source, "/" + csp) or strings.contains(source, "/" + mandatory_module_pattern + "/" + csp) {
+				if strings.has_suffix(source, "/" + csp) or source contains ("/" + mandatory_module_pattern + "/" + csp) {
 					return true
 				}
 			}

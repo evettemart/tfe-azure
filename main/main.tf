@@ -100,6 +100,8 @@ module "tfe" {
   vmss_instance_count            = var.vmss_instance_count
   vm_ssh_public_key              = var.vm_ssh_public_key
   vm_os_image                    = var.vm_os_image
+  vm_custom_image_name           = var.vm_custom_image_name
+  vm_custom_image_rg_name        = var.vm_custom_image_rg_name
   vm_sku                         = var.vm_sku
   container_runtime              = var.container_runtime
   docker_version                 = var.docker_version

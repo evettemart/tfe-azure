@@ -1,0 +1,12 @@
+module_calls = {
+	"remote_mod1": {
+		"name":               "remote_mod1",
+		"source":             "tfe.windtre.it/org/mod1/azurerm",
+		"version_constraint": "~> 1.0",
+	},
+	"remote_mod2": {
+		"name":               "remote_mod2",
+		"source":             "tfe.windtre.it/org/mod2/azurerm",
+		"version_constraint": "~> 2",
+	},
+}

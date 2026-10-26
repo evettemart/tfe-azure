@@ -39,7 +39,7 @@ for tfplan.resource_changes as address, rc {
 			tag_keys = keys(tags)
 			for mandatory_tags as required_tag {
 				if required_tag not in tag_keys {
-					violating_resources = append(violating_resources, {
+					append(violating_resources, {
 						"address":     address,
 						"type":        rc.type,
 						"missing_tag": required_tag,

@@ -27,7 +27,7 @@ invalid_module_sources = []
 
 for tfconfig.module_calls as address, call {
 	if not is_approved_source(call.source) {
-		invalid_module_sources = append(invalid_module_sources, {
+		append(invalid_module_sources, {
 			"address": address,
 			"module":  call.name,
 			"source":  call.source,

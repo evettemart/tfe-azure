@@ -22,7 +22,7 @@ for tfconfig.resources as address, res {
 	# Check resources declared directly in the root module (not inside a child module call)
 	if res.module_address == "" and res.mode == "managed" {
 		if res.type in prohibited_direct_resource_types {
-			disallowed_root_resources = append(disallowed_root_resources, {
+			append(disallowed_root_resources, {
 				"address": address,
 				"name":    res.name,
 				"type":    res.type,

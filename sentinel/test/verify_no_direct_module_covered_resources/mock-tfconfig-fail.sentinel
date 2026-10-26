@@ -1,0 +1,9 @@
+resources = {
+	"azurerm_linux_virtual_machine.direct": {
+		"address":        "azurerm_linux_virtual_machine.direct",
+		"module_address": "",
+		"mode":           "managed",
+		"name":           "direct",
+		"type":           "azurerm_linux_virtual_machine",
+	},
+}

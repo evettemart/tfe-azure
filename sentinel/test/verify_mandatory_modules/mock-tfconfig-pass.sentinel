@@ -1,0 +1,6 @@
+module_calls = {
+	"std_setting": {
+		"name":   "std_setting",
+		"source": "tfe.windtre.it/org/std_project_setting/azurerm",
+	},
+}
