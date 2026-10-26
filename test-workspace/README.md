@@ -7,7 +7,7 @@ outputs the result.
 ## Prerequisites
 
 - TFE is running and accessible at `https://tfe.azure.example.com`
-- You have created an organisation and a workspace named `test-random-string`
+- You have created an organisation and a workspace named `tf-demo-workspace`
 - Terraform CLI `>= 1.9` installed on your Mac
 - You are authenticated to TFE (`terraform login tfe.azure.example.com`)
 
@@ -30,4 +30,4 @@ outputs the result.
    random_string = "aB3xK7mNpQ"
    ```
 
-Watch the run in the TFE UI under **Workspaces → test-random-string → Runs**.
+Watch the run in the TFE UI under **Workspaces → tf-demo-workspace → Runs**.

@@ -9,7 +9,7 @@ Terraform module aligned with HashiCorp Validated Designs (HVD) to deploy Terraf
 ### General
 
 - TFE license file (_e.g._ `terraform.hclic`).
-- Terraform CLI `>= 1.9` installed on clients/workstations that will be used to deploy TFE
+- Terraform CLI `>= 1.9` installed on clients/workstations that will be used to deploy TFE (`>= 1.11` for [`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md))
 - General understanding of how to use Terraform (Community Edition)
 - General understanding of how to use Azure cloud.
 - `git` CLI and Visual Studio Code editor installed on workstations are strongly recommended
@@ -172,7 +172,7 @@ ssh -p 2222 -i "$SSH_KEY" tfeadmin@127.0.0.1 \
 
 **Step 2 — Create the admin account:**
 
-Open Chrome on the Windows bastion and navigate to:
+Open Chrome on the Ubuntu bastion (see [Ubuntu Bastion](#ubuntu-bastion)) and navigate to:
 
 ```
 https://tfe.azure.example.com/admin/account/new?token=<PASTE-TOKEN-HERE>
@@ -190,7 +190,7 @@ Go to `https://tfe.azure.example.com` and log in with the credentials you just c
 
 ## Running the test workspace
 
-Once TFE is deployed and you have created the initial admin account, you can verify end-to-end functionality by running a small test Terraform workspace using the [`scripts/run-test-workspace.sh`](scripts/run-test-workspace.sh) script. It installs Terraform 1.9.x on the VM, creates an organisation/workspace in TFE, and runs a `terraform apply` of a `random_string` resource.
+Once TFE is deployed and you have created the initial admin account, you can verify end-to-end functionality by running a small test Terraform workspace using the [`scripts/run-test-workspace.sh`](scripts/run-test-workspace.sh) script. It installs Terraform 1.9.x on the VM, creates a workspace in your existing TFE organisation, and runs a `terraform apply` of a `random_string` resource.
 
 ### Prerequisites
 
@@ -202,7 +202,7 @@ Once TFE is deployed and you have created the initial admin account, you can ver
 
 ### Step 1 — Create a user API token in TFE
 
-1. Open `https://tfe.azure.example.com` in the Windows bastion browser
+1. Open `https://tfe.azure.example.com` in the Ubuntu bastion browser
 2. Click your avatar (top-right) → **User Settings** → **Tokens**
 3. Click **Create an API token**, give it a name (e.g. `cli-test`), and copy the value
 
@@ -221,7 +221,8 @@ export TFE_TOKEN=<paste-token-from-step-1>
 From the repo root:
 
 ```bash
-bash tfe-azure/scripts/run-test-workspace.sh
+bash tfe-azure/scripts/run-test-workspace.sh         # init + apply (default)
+bash tfe-azure/scripts/run-test-workspace.sh plan    # init + plan only
 ```
 
 The script will:
@@ -253,7 +254,7 @@ Outputs:
 [run-test] Done. Check the TFE UI at https://tfe.azure.example.com for the run results.
 ```
 
-The run will also appear in the TFE UI under **Organisations → `<TFE_ORG>` → Workspaces → test-random-string**.
+The run will also appear in the TFE UI under **Organisations → `<TFE_ORG>` → Workspaces → tf-demo-workspace**.
 
 ### Re-running
 
@@ -263,6 +264,23 @@ The script is fully idempotent — safe to run multiple times. On subsequent run
 - CA bundle is re-copied (harmless overwrite)
 - Workspace directory is wiped and re-copied fresh
 - `terraform apply` is a no-op (no diff in state)
+
+## Managing TFE with Terraform from your Mac
+
+[`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md) is a Terraform configuration that uses the `tfe` provider to create a workspace (with health assessments) and optional Teams/email notifications. Its README lists the variables.
+
+TFE is not directly reachable from your Mac, so [`scripts/run-tf-demo-workspace-config.sh`](scripts/run-tf-demo-workspace-config.sh) opens an SSH SOCKS proxy through the [Ubuntu bastion](#ubuntu-bastion), sets `HTTPS_PROXY=socks5h://…` (Terraform ignores `ALL_PROXY`), runs the command, then closes the proxy. `terraform init` runs without the proxy.
+
+Prerequisites: the Ubuntu bastion exists and allows SSH from your IP, `tf-demo-workspace-config/terraform.tfvars` has a real `tfe_organization`, and `TFE_TOKEN` is a user API token (not the IACT token).
+
+```bash
+export TFE_TOKEN=<your-user-api-token>
+bash tfe-azure/scripts/run-tf-demo-workspace-config.sh           # init + plan (default)
+bash tfe-azure/scripts/run-tf-demo-workspace-config.sh apply
+bash tfe-azure/scripts/run-tf-demo-workspace-config.sh destroy
+```
+
+> 📝 Note: Email notifications are only delivered if SMTP is configured in TFE.
 
 ## Docs
 
@@ -274,65 +292,40 @@ Below are links to various docs related to the customization and management of y
 - [TFE Configuration Settings](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-config-settings.md)
 - [Azure GovCloud Deployment](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/govcloud-deployment.md)
 
-## Windows Bastion
+## Ubuntu Bastion
 
-A Windows Server 2025 VM with Google Chrome pre-installed can be optionally deployed to access the TFE UI from a browser. Enable it by setting `create_windows_bastion = true` in `terraform.tfvars`.
+An Ubuntu VM with an XFCE desktop, xrdp and Google Chrome can be optionally deployed to open the TFE UI in a graphical browser.
+
+Enable it in `main/terraform.tfvars`:
+
+```hcl
+create_ubuntu_bastion        = true
+ubuntu_bastion_allowed_cidrs = ["<your-public-ip>/32"]
+# ubuntu_bastion_image_name      = "hc-base-ubuntu-2404-amd64" # default
+# ubuntu_bastion_vm_size         = "Standard_D4ds_v5"          # default Standard_D2s_v3
+# ubuntu_bastion_tfe_hosts_ip    = "<TFE-VM-IP>"               # default: load balancer IP
+# ubuntu_bastion_run_setup_script = false                      # default true; see Notes
+```
+
+Supply the login password through the environment (see `.env.local.example`): `TF_VAR_ubuntu_bastion_admin_password`. Optionally set `ubuntu_bastion_ssh_public_key` for SSH key login.
+
+> 📝 Note: `Standard_D2s_v3` may be unavailable in some regions (`SkuNotAvailable`); choose another size with `ubuntu_bastion_vm_size`.
+
+The NSG allows TCP 3389 (xrdp) and TCP 22 (SSH) from `ubuntu_bastion_allowed_cidrs` only.
 
 ### Connecting from your Mac
 
-- Get the public IP: `terraform -chdir=main output windows_bastion_public_ip`
-- Install **Microsoft Remote Desktop** from the Mac App Store (free) if not already installed
-- Open the app → **Add PC** → enter the IP address
-- Set username `bastionadmin` (or your `windows_bastion_admin_username`) and the password you supplied via `TF_VAR_windows_bastion_admin_password`
-- Accept the certificate warning → you are on the Windows desktop
+- Get the public IP: `terraform -chdir=main output ubuntu_bastion_public_ip`
+- Use **Microsoft Remote Desktop** → **Add PC** → the IP address
+- Username `bastionadmin` (or `ubuntu_bastion_admin_username`) and the password you supplied
+- On the desktop, open **Google Chrome** and browse to `https://<tfe_fqdn>`
 
-### Accessing TFE from the Windows bastion
+### Notes
 
-Once connected via RDP, open PowerShell and follow these steps:
-
-**1. Get the TFE VM private IP (run on your Mac):**
-```bash
-az vmss nic list \
-  --resource-group tfe-rg \
-  --vmss-name em-tfe-vmss \
-  --query "[].ipConfigurations[0].privateIPAddress" \
-  --output tsv
-```
-
-> Note: the Windows bastion may be assigned the same IP as the TFE VM if both are on the VM subnet. Always look up the TFE VM IP from Azure rather than assuming.
-
-**2. Test the connection (run in Windows PowerShell):**
-```powershell
-Test-NetConnection -ComputerName <TFE-VM-IP> -Port 443
-```
-`TcpTestSucceeded : True` means TFE is reachable.
-
-**3. Add the TFE hostname to the Windows hosts file (run in Windows PowerShell):**
-```powershell
-# Remove any existing entry for tfe.azure.example.com
-$hosts = Get-Content C:\Windows\System32\drivers\etc\hosts
-$hosts = $hosts | Where-Object { $_ -notmatch "tfe.azure.example.com" }
-$hosts | Set-Content C:\Windows\System32\drivers\etc\hosts
-
-# Add the correct entry
-Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "`n<TFE-VM-IP> tfe.azure.example.com"
-
-# Verify
-Get-Content C:\Windows\System32\drivers\etc\hosts | Select-String "tfe"
-```
-
-**4. Open Chrome:**
-```powershell
-Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" "https://tfe.azure.example.com"
-```
-
-If Chrome is not yet installed:
-```powershell
-$i = "$env:TEMP\chrome.exe"
-Invoke-WebRequest "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile $i
-Start-Process $i -Args "/silent /install" -Wait
-Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" "https://tfe.azure.example.com"
-```
+- By default the setup script runs on first boot via cloud-init and takes a few minutes (it installs the desktop and Chrome). Progress is logged to `/var/log/ubuntu-bastion-setup.log` on the VM; if xrdp is not up yet, SSH in and check that log.
+- If VM creation hangs or you prefer to run setup separately, set `ubuntu_bastion_run_setup_script = false` and run [`scripts/setup-ubuntu-bastion.sh`](scripts/setup-ubuntu-bastion.sh) after `terraform apply`. It runs the same setup over SSH (password login) and is safe to re-run.
+- If the password is rejected over SSH/RDP, reset it with `az vm user update -g <resource-group> -n <vm-name> -u bastionadmin -p '<password>'`.
+- The script maps `tfe_fqdn` to the load balancer IP in `/etc/hosts`. If the load balancer is not reachable from the bastion, set `ubuntu_bastion_tfe_hosts_ip` to the TFE VM private IP. Instance IPs can change, so re-check it if the TFE VM is replaced.
 
 ## Module support
 

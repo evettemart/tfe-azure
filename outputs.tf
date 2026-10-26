@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: MPL-2.0
 
 #------------------------------------------------------------------------------
-# Windows bastion
+# Ubuntu bastion
 #------------------------------------------------------------------------------
-output "windows_bastion_public_ip" {
-  value       = var.create_windows_bastion ? azurerm_public_ip.windows_bastion[0].ip_address : null
-  description = "Public IP address of the Windows bastion VM. Use this to open an RDP session from your Mac."
+output "ubuntu_bastion_public_ip" {
+  value       = var.create_ubuntu_bastion ? azurerm_public_ip.ubuntu_bastion[0].ip_address : null
+  description = "Public IP address of the Ubuntu bastion VM. Use this to open an RDP (xrdp) or SSH session from your Mac."
 }
 
 #------------------------------------------------------------------------------
