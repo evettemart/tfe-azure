@@ -15,7 +15,8 @@ The upstream [HashiCorp reference architecture](docs/images/tfe_on_azure.png) is
 | Azure Managed Redis | Used for TFE `>= 1.0.1`. Older tags use Azure Cache for Redis. |
 | Blob Storage | TFE object storage, over a private endpoint. |
 | Networking (optional) | VNet, subnets and Azure Bastion, when `create_networking_resources = true`. |
-| Log Analytics, Fluent Bit (optional) | TFE container logs. A Portal dashboard and an Event Hub can sit on top. |
+| Log Analytics, Fluent Bit (optional) | TFE container logs, sent by Fluent Bit straight to Log Analytics (`log_fwd_destination_type = "log_analytics"`) or through an Event Hub. A Portal dashboard can sit on top. |
+| Event Hub to Log Analytics (optional) | With `create_event_hub_log_analytics_ingestion = true`, a Data Collection Rule reads the Event Hub and writes to the `tfe_fluent_bit_CL` table, which the dashboard queries. Set `create_event_hub = true` and `create_log_analytics_workspace = true` with it. Known issue: Azure rejects it on a `PerGB2018` workspace; see [Event Hub to Log Analytics](#event-hub-to-log-analytics). |
 | Ubuntu bastion (optional) | Desktop browser inside the VNet for the TFE UI. See [Ubuntu bastion](#ubuntu-bastion). |
 
 Created outside this Terraform: the **bootstrap Key Vault** that holds the license, TLS certificate and passwords (made by [`scripts/bootstrap.sh`](scripts/bootstrap.sh)).
@@ -173,6 +174,30 @@ The password comes from the environment: `TF_VAR_ubuntu_bastion_admin_password` 
 - If the password is rejected over SSH or RDP, reset it with `az vm user update -g <resource-group> -n <vm-name> -u bastionadmin -p '<password>'`.
 - The setup maps `tfe_fqdn` to the load balancer IP in `/etc/hosts`. If the load balancer is not reachable from the bastion, set `ubuntu_bastion_tfe_hosts_ip` to the TFE VM private IP, and re-check it if the VM is replaced.
 
+## Event Hub to Log Analytics
+
+`create_event_hub_log_analytics_ingestion = true` adds a Data Collection Rule that reads the Event Hub and writes to the `tfe_fluent_bit_CL` table ([`event_hub_ingestion.tf`](event_hub_ingestion.tf)). With `log_fwd_destination_type = "both"`, Fluent Bit sends to Log Analytics directly and to the Event Hub. The dashboard reads the direct path. With the rule off, nothing reads the Event Hub, so it only holds the events for other consumers.
+
+**Known issue: the Data Collection Rule is rejected on a standard workspace.** Creating it on a `PerGB2018` workspace (what `create_log_analytics_workspace = true` makes) fails with:
+
+```
+Error: creating Data Collection Rule (Subscription: "<subscription-id>"
+Resource Group Name: "tfe-log-analytics-rg"
+Data Collection Rule Name: "em-tfe-eventhub-dcr"): unexpected status 400 (400 Bad Request)
+with error: InvalidPayload: Event Hub data imports are only available with 'LACluster' and
+'CapacityReservation' SKUs of Log Analytics workspace.
+
+  with module.tfe.azurerm_monitor_data_collection_rule.event_hub[0],
+  on ../event_hub_ingestion.tf line 85, in resource "azurerm_monitor_data_collection_rule" "event_hub":
+  85: resource "azurerm_monitor_data_collection_rule" "event_hub" {
+```
+
+Event Hub data imports need a workspace on the `CapacityReservation` SKU or one linked to a dedicated cluster. The workspace in [`log_analytics.tf`](log_analytics.tf) is hard-coded to `PerGB2018` with 30 days retention, so the feature can't work with this module as it stands. Until that changes, keep `create_event_hub_log_analytics_ingestion = false`. The Event Hub still receives logs with `log_fwd_destination_type = "event_hub"` or `"both"`, and `"both"` also keeps the direct Log Analytics path for the dashboard.
+
+A capacity reservation is a commitment tier with a minimum daily charge; check Azure pricing for the current minimum. The Data Collection Rule has not been tested on such a workspace.
+
+**Existing `tfe_fluent_bit_CL` table.** If the workspace already has this table from the direct Fluent Bit output, creating it again fails with `a resource with the ID ... already exists`. Import it first (the comment in `event_hub_ingestion.tf` has the command). The table definition matches the existing columns, so nothing changes. If you then turn the ingestion off again, run `terraform state rm` on the table before applying, or Terraform plans to destroy it and its data.
+
 ## Docs
 
 - [Deployment customizations](docs/deployment-customizations.md)
@@ -215,6 +240,7 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_dns_zone.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/dns_zone) | resource |
 | [azurerm_eventhub.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub) | resource |
 | [azurerm_eventhub_authorization_rule.fluent_bit](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub_authorization_rule) | resource |
+| [azurerm_eventhub_consumer_group.log_analytics](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub_consumer_group) | resource |
 | [azurerm_eventhub_namespace.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub_namespace) | resource |
 | [azurerm_key_vault_access_policy.postgres_cmk](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault_access_policy) | resource |
 | [azurerm_key_vault_access_policy.storage_account_cmk](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault_access_policy) | resource |
@@ -227,8 +253,10 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_linux_virtual_machine.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine) | resource |
 | [azurerm_linux_virtual_machine_scale_set.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine_scale_set) | resource |
 | [azurerm_log_analytics_workspace.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/log_analytics_workspace) | resource |
+| [azurerm_log_analytics_workspace_table_custom_log.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/log_analytics_workspace_table_custom_log) | resource |
 | [azurerm_managed_redis.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/managed_redis) | resource |
 | [azurerm_managed_redis.tfe_sidekiq](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/managed_redis) | resource |
+| [azurerm_monitor_data_collection_rule.event_hub](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule) | resource |
 | [azurerm_network_interface.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface) | resource |
 | [azurerm_network_interface_security_group_association.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface_security_group_association) | resource |
 | [azurerm_network_security_group.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_security_group) | resource |
@@ -255,6 +283,7 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_resource_group.log_analytics](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_resource_group.networking](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_resource_group.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
+| [azurerm_role_assignment.event_hub_ingestion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.postgres_cmk_crypto_service_encryption_user](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.storage_account_cmk_crypto_service_encryption_user](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.tfe_kv_reader](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
@@ -269,6 +298,7 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_subnet.lb](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
 | [azurerm_subnet.redis](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
 | [azurerm_subnet.vm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
+| [azurerm_user_assigned_identity.event_hub_ingestion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [azurerm_user_assigned_identity.postgres](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [azurerm_user_assigned_identity.storage_account](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [azurerm_user_assigned_identity.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
@@ -309,8 +339,9 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_common_tags"></a> [common\_tags](#input\_common\_tags) | Map of common tags for taggable Azure resources. | `map(string)` | `{}` | no |
 | <a name="input_create_bastion_host"></a> [create\_bastion\_host](#input\_create\_bastion\_host) | Boolean to create an Azure Bastion host for VM access. Only valid when `create_networking_resources` is `true`. | `bool` | `true` | no |
 | <a name="input_create_blob_storage_private_endpoint"></a> [create\_blob\_storage\_private\_endpoint](#input\_create\_blob\_storage\_private\_endpoint) | Boolean to create a private endpoint and private DNS zone for TFE Storage Account. | `bool` | `true` | no |
-| <a name="input_create_dashboard"></a> [create\_dashboard](#input\_create\_dashboard) | Boolean to create an Azure Portal shared dashboard showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and `log_fwd_destination_type = "log_analytics"`. | `bool` | `false` | no |
+| <a name="input_create_dashboard"></a> [create\_dashboard](#input\_create\_dashboard) | Boolean to create an Azure Portal shared dashboard showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and either `log_fwd_destination_type = "log_analytics"` or `create_event_hub_log_analytics_ingestion = true`. | `bool` | `false` | no |
 | <a name="input_create_event_hub"></a> [create\_event\_hub](#input\_create\_event\_hub) | Boolean to automatically create an Azure Event Hubs namespace and Event Hub topic for log forwarding. | `bool` | `false` | no |
+| <a name="input_create_event_hub_log_analytics_ingestion"></a> [create\_event\_hub\_log\_analytics\_ingestion](#input\_create\_event\_hub\_log\_analytics\_ingestion) | Boolean to create a Data Collection Rule that reads the Event Hub and writes the events to the `tfe_fluent_bit_CL` table in the Log Analytics workspace. Requires `create_event_hub = true` and `create_log_analytics_workspace = true`.. | `bool` | `false` | no |
 | <a name="input_create_lb"></a> [create\_lb](#input\_create\_lb) | Boolean to create an Azure Load Balancer for TFE. | `bool` | `true` | no |
 | <a name="input_create_log_analytics_workspace"></a> [create\_log\_analytics\_workspace](#input\_create\_log\_analytics\_workspace) | Boolean to create the Log Analytics resource group and workspace. | `bool` | `false` | no |
 | <a name="input_create_networking_resources"></a> [create\_networking\_resources](#input\_create\_networking\_resources) | Boolean to create the networking resource group, VNet, and subnets. Set to false if these already exist. | `bool` | `false` | no |

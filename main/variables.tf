@@ -1019,6 +1019,17 @@ variable "create_event_hub" {
   default     = false
 }
 
+variable "create_event_hub_log_analytics_ingestion" {
+  type        = bool
+  description = "Boolean to create a Data Collection Rule that reads the Event Hub and writes the events to the `tfe_fluent_bit_CL` table in the Log Analytics workspace. Requires `create_event_hub = true` and `create_log_analytics_workspace = true`.."
+  default     = false
+
+  validation {
+    condition     = var.create_event_hub_log_analytics_ingestion ? var.create_event_hub && var.create_log_analytics_workspace : true
+    error_message = "`create_event_hub` and `create_log_analytics_workspace` must both be `true` when `create_event_hub_log_analytics_ingestion` is `true`."
+  }
+}
+
 variable "event_hub_rg_name" {
   type        = string
   description = "Resource Group name for the Event Hub resources. Defaults to the TFE resource group if not specified."
