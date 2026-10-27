@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 725" width="980" height="725" font-family="-apple-system, 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+  <rect width="980" height="725" fill="#ffffff"/>
+
+  <!-- Outside Azure -->
+  <rect x="60" y="30" width="200" height="50" rx="4" fill="#f7f8fa" stroke="#9aa4b2"/>
+  <text x="160" y="52" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Operator (your Mac)</text>
+  <text x="160" y="69" font-size="11" text-anchor="middle" fill="#57606a">Terraform, az CLI, scripts</text>
+
+  <rect x="540" y="30" width="160" height="50" rx="4" fill="#f7f8fa" stroke="#9aa4b2"/>
+  <text x="620" y="52" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">TFE users / VCS</text>
+  <text x="620" y="69" font-size="11" text-anchor="middle" fill="#57606a">Browser, CLI, API</text>
+
+  <rect x="780" y="25" width="160" height="60" rx="4" fill="#f7f8fa" stroke="#9aa4b2"/>
+  <text x="860" y="48" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Internet</text>
+  <text x="860" y="64" font-size="10" text-anchor="middle" fill="#57606a">registry.terraform.io</text>
+  <text x="860" y="77" font-size="10" text-anchor="middle" fill="#57606a">releases.hashicorp.com</text>
+
+  <!-- Azure subscription -->
+  <rect x="20" y="110" width="940" height="575" rx="6" fill="none" stroke="#9aa4b2" stroke-width="1.5"/>
+  <text x="56" y="130" font-size="13" font-weight="600" fill="#1f2328">Azure subscription</text>
+
+  <!-- Virtual network -->
+  <rect x="60" y="255" width="680" height="410" rx="6" fill="none" stroke="#3b82d4" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="300" y="274" font-size="12" font-weight="600" fill="#3b82d4">Virtual network (tfe-vnet)</text>
+
+  <!-- Row 1: Azure Bastion subnet -->
+  <rect x="80" y="290" width="220" height="80" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="92" y="307" font-size="11" fill="#57606a">AzureBastionSubnet</text>
+  <rect x="100" y="318" width="180" height="40" rx="4" fill="#ffffff" stroke="#3b82d4" stroke-dasharray="4 3"/>
+  <text x="190" y="343" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Azure Bastion</text>
+
+  <!-- Row 1: Load balancer subnet -->
+  <rect x="480" y="290" width="240" height="80" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="492" y="307" font-size="11" fill="#57606a">Load balancer subnet</text>
+  <rect x="500" y="318" width="200" height="40" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="600" y="343" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Azure Load Balancer</text>
+
+  <!-- Row 2: VM subnet -->
+  <rect x="80" y="395" width="640" height="125" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="92" y="412" font-size="11" fill="#57606a">VM subnet</text>
+  <rect x="100" y="425" width="200" height="70" rx="4" fill="#ffffff" stroke="#3b82d4" stroke-dasharray="4 3"/>
+  <text x="200" y="453" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">Ubuntu bastion</text>
+  <text x="200" y="470" font-size="11" text-anchor="middle" fill="#57606a">XFCE, xrdp, Chrome</text>
+  <text x="200" y="484" font-size="11" text-anchor="middle" fill="#57606a">public IP</text>
+  <rect x="480" y="425" width="220" height="70" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="590" y="453" font-size="13" font-weight="600" text-anchor="middle" fill="#1f2328">TFE VM scale set</text>
+  <text x="590" y="470" font-size="11" text-anchor="middle" fill="#57606a">Linux, Docker or Podman</text>
+  <text x="590" y="484" font-size="11" text-anchor="middle" fill="#57606a">managed identity</text>
+
+  <!-- Row 3: data services -->
+  <rect x="80" y="560" width="200" height="90" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="92" y="577" font-size="11" fill="#57606a">Database subnet</text>
+  <rect x="100" y="588" width="160" height="50" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="180" y="610" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">PostgreSQL</text>
+  <text x="180" y="626" font-size="11" text-anchor="middle" fill="#57606a">Flexible Server</text>
+
+  <rect x="300" y="560" width="200" height="90" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="312" y="577" font-size="11" fill="#57606a">Redis subnet</text>
+  <rect x="320" y="588" width="160" height="50" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="400" y="610" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Managed Redis</text>
+  <text x="400" y="626" font-size="11" text-anchor="middle" fill="#57606a">private endpoint</text>
+
+  <rect x="520" y="560" width="200" height="90" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <text x="532" y="577" font-size="11" fill="#57606a">Object storage</text>
+  <rect x="540" y="588" width="160" height="50" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="620" y="610" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Blob Storage</text>
+  <text x="620" y="626" font-size="11" text-anchor="middle" fill="#57606a">private endpoint</text>
+
+  <!-- Right column inside Azure -->
+  <rect x="780" y="420" width="160" height="60" rx="4" fill="#f7f8fa" stroke="#9aa4b2"/>
+  <text x="860" y="446" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Bootstrap Key Vault</text>
+  <text x="860" y="463" font-size="11" text-anchor="middle" fill="#57606a">prerequisite (bootstrap.sh)</text>
+
+  <rect x="780" y="540" width="160" height="130" rx="4" fill="#f7f8fa" stroke="#e5e7eb"/>
+  <rect x="790" y="550" width="140" height="34" rx="4" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="860" y="571" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Log Analytics</text>
+  <rect x="790" y="590" width="140" height="34" rx="4" fill="#ffffff" stroke="#3b82d4" stroke-dasharray="4 3"/>
+  <text x="860" y="611" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Portal dashboard</text>
+  <rect x="790" y="630" width="140" height="34" rx="4" fill="#ffffff" stroke="#3b82d4" stroke-dasharray="4 3"/>
+  <text x="860" y="651" font-size="12" font-weight="600" text-anchor="middle" fill="#1f2328">Event Hub</text>
+
+  <!-- Connectors -->
+  <g fill="none" stroke="#57606a" stroke-width="1.4" marker-end="url(#arr)">
+    <path d="M240,80 V318"/>
+    <path d="M60,55 H40 V460 H100"/>
+    <path d="M620,80 V318"/>
+    <path d="M600,358 V425"/>
+    <path d="M280,338 H390 V445 H480"/>
+    <path d="M300,478 H480"/>
+    <path d="M700,435 H755 V55 H780"/>
+    <path d="M700,455 H780"/>
+    <path d="M700,485 H765 V567 H790"/>
+  </g>
+  <g fill="none" stroke="#57606a" stroke-width="1.4">
+    <path d="M600,495 V540"/>
+    <path d="M180,540 H620"/>
+  </g>
+  <g fill="none" stroke="#57606a" stroke-width="1.4" marker-end="url(#arr)">
+    <path d="M180,540 V588"/>
+    <path d="M400,540 V588"/>
+    <path d="M620,540 V588"/>
+  </g>
+
+  <!-- Connector labels -->
+  <g font-size="11" fill="#57606a">
+    <text x="250" y="200">SSH tunnel (az network bastion)</text>
+    <text transform="translate(33,330) rotate(-90)" text-anchor="middle">RDP / SSH</text>
+    <text x="628" y="200">HTTPS 443</text>
+    <text x="398" y="418">SSH tunnel</text>
+    <text x="368" y="495">HTTPS</text>
+    <text x="703" y="48" font-size="10">HTTPS out</text>
+    <text x="744" y="449" font-size="10">secrets</text>
+    <text x="769" y="525" font-size="10">logs</text>
+  </g>
+
+  <!-- Legend -->
+  <rect x="20" y="698" width="26" height="14" rx="3" fill="#eaf2fb" stroke="#3b82d4"/>
+  <text x="52" y="709" font-size="11" fill="#57606a">Created by this repo</text>
+  <rect x="190" y="698" width="26" height="14" rx="3" fill="#ffffff" stroke="#3b82d4" stroke-dasharray="4 3"/>
+  <text x="222" y="709" font-size="11" fill="#57606a">Optional (set by a variable)</text>
+  <rect x="410" y="698" width="26" height="14" rx="3" fill="#f7f8fa" stroke="#9aa4b2"/>
+  <text x="442" y="709" font-size="11" fill="#57606a">Prerequisite, created outside Terraform</text>
+</svg>

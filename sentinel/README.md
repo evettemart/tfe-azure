@@ -78,9 +78,13 @@ sentinel/
 
 ---
 
-## Deployment into TFE
+## Manual Deployment into TFE
 
 You can link this folder directly as a **Policy Set** in your Terraform Enterprise Organization:
 1. In TFE, navigate to **Settings** &rarr; **Policy Sets** &rarr; **Create new policy set**.
 2. Connect your VCS repository and point the path to `/sentinel` (or `tfe-azure/sentinel`).
 3. Set scope to **All workspaces** or selected workspaces.
+
+## Automated Deployment to TFE
+
+The policy set can also be created and enabled on a workspace with Terraform, with no clicks in the UI. This is done in [`tf-demo-workspace-config`](../tf-demo-workspace-config/README.md), which uploads this folder as a policy set and enables it on `tf-demo-workspace`. See the "Sentinel policy set" section of that README for the variables and behaviour.

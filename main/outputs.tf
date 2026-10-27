@@ -6,6 +6,36 @@ output "url" {
   description = "URL of TFE application."
 }
 
+output "resource_group_name" {
+  value       = module.tfe.resource_group_name
+  description = "Name of the resource group containing the TFE resources."
+}
+
+output "vmss_name" {
+  value       = module.tfe.vmss_name
+  description = "Name of the TFE Virtual Machine Scale Set. Used by the scripts to find the TFE VM."
+}
+
+output "load_balancer_ip" {
+  value       = module.tfe.load_balancer_ip
+  description = "IP address of the TFE load balancer: the public IP when external, or the private IP when internal."
+}
+
+output "vnet_id" {
+  value       = module.tfe.vnet_id
+  description = "ID of the Virtual Network that TFE is deployed in."
+}
+
+output "networking_resource_group_name" {
+  value       = module.tfe.networking_resource_group_name
+  description = "Name of the networking resource group. Only populated when `create_networking_resources` is `true`."
+}
+
+output "azure_bastion_name" {
+  value       = module.tfe.azure_bastion_name
+  description = "Name of the Azure Bastion host used to SSH to the TFE VM."
+}
+
 output "tfe_admin_console_url_pattern" {
   value       = module.tfe.tfe_admin_console_url_pattern
   description = "URL pattern to access the TFE Admin Console when it is enabled."
@@ -44,11 +74,6 @@ output "public_dns_zone_name_servers" {
 output "dashboard_url" {
   value       = module.tfe.dashboard_url
   description = "Azure Portal URL to open the TFE Portal Dashboard. Only populated when `create_dashboard` is `true`."
-}
-
-output "workbook_url" {
-  value       = module.tfe.workbook_url
-  description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
 }
 
 output "event_hub_namespace_id" {

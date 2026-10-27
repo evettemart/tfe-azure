@@ -102,9 +102,8 @@ log_analytics_workspace_rg_name = "<tfe-log-analytics-resource-group-name>"
 # event_hub_name                  = "<eventhub-name>"
 # event_hub_connection_string     = "<eventhub-primary-connection-string>"
 
-# --- Dashboard & Workbook (optional) --- #
+# --- Dashboard (optional) --- #
 create_dashboard = <true>
-create_workbook  = <true>
 
 # --- Ubuntu bastion (optional) --- #
 # create_ubuntu_bastion           = <true>

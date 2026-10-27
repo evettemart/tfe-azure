@@ -970,12 +970,6 @@ variable "create_dashboard" {
   default     = false
 }
 
-variable "create_workbook" {
-  type        = bool
-  description = "Boolean to create an Azure Monitor Workbook with interactive KQL charts showing TFE workspace run summaries."
-  default     = false
-}
-
 #------------------------------------------------------------------------------
 # Log forwarding
 #------------------------------------------------------------------------------

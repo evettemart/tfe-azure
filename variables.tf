@@ -1109,12 +1109,6 @@ variable "create_dashboard" {
   default     = false
 }
 
-variable "create_workbook" {
-  type        = bool
-  description = "Boolean to create an Azure Monitor Workbook with interactive KQL charts showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and `log_fwd_destination_type = \"log_analytics\"`."
-  default     = false
-}
-
 #------------------------------------------------------------------------------
 # Ubuntu bastion host
 #------------------------------------------------------------------------------
