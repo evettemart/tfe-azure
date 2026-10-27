@@ -25,17 +25,45 @@ output "url" {
   description = "URL of TFE application based on `tfe_fqdn` input."
 }
 
+output "resource_group_name" {
+  value       = local.resource_group_name
+  description = "Name of the resource group containing the TFE resources."
+}
+
+output "vmss_name" {
+  value       = azurerm_linux_virtual_machine_scale_set.tfe.name
+  description = "Name of the TFE Virtual Machine Scale Set. Used by the scripts to find the TFE VM."
+}
+
+output "load_balancer_ip" {
+  value       = var.create_lb ? (var.lb_is_internal ? var.lb_private_ip : azurerm_public_ip.tfe_lb[0].ip_address) : null
+  description = "IP address of the TFE load balancer: the public IP when the load balancer is external, or the private IP when it is internal. `null` when `create_lb` is `false`."
+}
+
+#------------------------------------------------------------------------------
+# Networking
+#------------------------------------------------------------------------------
+output "vnet_id" {
+  value       = local.resolved_vnet_id
+  description = "ID of the Virtual Network that TFE is deployed in."
+}
+
+output "networking_resource_group_name" {
+  value       = try(azurerm_resource_group.networking[0].name, null)
+  description = "Name of the networking resource group. Only populated when `create_networking_resources` is `true`."
+}
+
+output "azure_bastion_name" {
+  value       = try(azurerm_bastion_host.tfe[0].name, null)
+  description = "Name of the Azure Bastion host used to SSH to the TFE VM. Only populated when `create_networking_resources` and `create_bastion_host` are `true`."
+}
+
 #------------------------------------------------------------------------------
 # Dashboard
 #------------------------------------------------------------------------------
 output "dashboard_url" {
   value       = var.create_dashboard ? "https://portal.azure.com/#@/dashboard/arm${azurerm_portal_dashboard.tfe[0].id}" : null
   description = "Azure Portal URL to open the TFE Portal Dashboard. Only populated when `create_dashboard` is `true`."
-}
-
-output "workbook_url" {
-  value       = var.create_workbook ? "https://portal.azure.com/#resource${azurerm_application_insights_workbook.tfe[0].id}" : null
-  description = "Azure Portal URL to open the TFE Monitor Workbook. Only populated when `create_workbook` is `true`."
 }
 
 #------------------------------------------------------------------------------

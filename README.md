@@ -1,277 +1,129 @@
-# Terraform Enterprise HVD on Azure VM
+# Terraform Enterprise on Azure
 
-Terraform module aligned with HashiCorp Validated Designs (HVD) to deploy Terraform Enterprise (TFE) on Microsoft Azure using Azure Virtual Machines with a container runtime. This module defaults to deploying TFE in the `active-active` [operational mode](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/operation-modes), but `external` is also supported. Docker and Podman are the supported container runtimes.
+Terraform that deploys Terraform Enterprise (TFE) on Microsoft Azure Virtual Machines, based on the HashiCorp Validated Design (HVD). It defaults to `active-active` [operational mode](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/operation-modes); `external` is also supported. Docker and Podman are the supported container runtimes.
 
-![TFE architecture](https://developer.hashicorp.com/.extracted/hvd/img/terraform/solution-design-guides/tfe/architecture-logical-active-active.png)
+![What this repo deploys](docs/images/tfe-azure-deployment.svg)
+
+The upstream [HashiCorp reference architecture](docs/images/tfe_on_azure.png) is kept for comparison.
+
+## What this deploys
+
+| Component | Notes |
+|---|---|
+| TFE on a Linux VM scale set | Behind an Azure Load Balancer (internal or external). Docker or Podman. |
+| PostgreSQL Flexible Server | TFE database. |
+| Azure Managed Redis | Used for TFE `>= 1.0.1`. Older tags use Azure Cache for Redis. |
+| Blob Storage | TFE object storage, over a private endpoint. |
+| Networking (optional) | VNet, subnets and Azure Bastion, when `create_networking_resources = true`. |
+| Log Analytics, Fluent Bit (optional) | TFE container logs. A Portal dashboard and an Event Hub can sit on top. |
+| Ubuntu bastion (optional) | Desktop browser inside the VNet for the TFE UI. See [Ubuntu bastion](#ubuntu-bastion). |
+
+Created outside this Terraform: the **bootstrap Key Vault** that holds the license, TLS certificate and passwords (made by [`scripts/bootstrap.sh`](scripts/bootstrap.sh)).
+
+Also in this repo, applied after TFE is running:
+
+- [`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md): a demo workspace, the Sentinel policy set from [`sentinel/`](sentinel/README.md), and optional notifications.
+- [`test-workspace/`](test-workspace/README.md): a small config used to prove that runs work.
 
 ## Prerequisites
 
-### General
+- A TFE license file (for example `terraform.hclic`, git-ignored).
+- Terraform `>= 1.9` (`>= 1.11` for [`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md)), the `az` CLI (logged in), `ssh`, `jq`.
+- An Azure subscription where you can create the resources above.
+- A name for TFE (`tfe_fqdn`, for example `tfe.azure.example.com`).
+- A bootstrap Key Vault with the TFE secrets. [`scripts/bootstrap.sh`](scripts/bootstrap.sh) creates it and fills it with a self-signed certificate and generated passwords. To use your own certificate, see [TLS certificate rotation](docs/tfe-cert-rotation.md).
+- Network access from the VM subnet to the [TFE egress endpoints](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/requirements/network#egress).
 
-- TFE license file (_e.g._ `terraform.hclic`).
-- Terraform CLI `>= 1.9` installed on clients/workstations that will be used to deploy TFE (`>= 1.11` for [`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md))
-- General understanding of how to use Terraform (Community Edition)
-- General understanding of how to use Azure cloud.
-- `git` CLI and Visual Studio Code editor installed on workstations are strongly recommended
-- Azure subscription that TFE will be deployed in with admin-like permissions to provision these [resources](#resources) in via Terraform CLI
-- Azure blob storage account for [AzureRM remote state backend](https://www.terraform.io/docs/language/settings/backends/azurerm.html) that will be used to manage the Terraform state of this TFE deployment (out-of-band from the TFE application) via Terraform CLI (Community Edition)
+If you bring your own network (`create_networking_resources = false`) you also need a VNet with a load balancer subnet, a VM subnet (service endpoints for `Microsoft.KeyVault`, `Microsoft.Sql`, `Microsoft.Storage`), a database subnet delegated to `Microsoft.DBforPostgreSQL/flexibleServers`, and a Redis subnet. Allow these on the subnets:
 
-### Networking
+| Port | Direction |
+|---|---|
+| `TCP/443` | Users, VCS and CI/CD to the load balancer (internal) or VM subnet (external) |
+| `TCP/5432` | VM subnet to database subnet |
+| `TCP/6380` | VM subnet to Redis |
+| `TCP/8201` | Between TFE VMs (`active-active` only) |
+| `TCP/9090`, `TCP/9091` | Optional: metrics scraping |
+| `TCP/9443` | Optional: admin console, when `tfe_admin_console_disabled = false` |
 
-- Azure VNet ID.
-- Load balancer subnet ID (if load balancer is to be _internal_)
-- Load balancer static IP address (if load balancer is to be _internal_)
-- VM subnet ID with service endpoints enabled for `Microsoft.KeyVault`, `Microsoft.Sql`, and `Microsoft.Storage`
-- VM subnet requires access to the egress endpoints listed [here](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/requirements/network#egress)
-- Database subnet ID with service delegation configured for `Microsoft.DBforPostgreSQL/flexibleServers` for join action (`Microsoft.Network/virtualNetworks/subnets/join/action`)
-- Redis cache subnet ID
-- Ability to create private endpoints on the database and redis cache subnets
-- Chosen fully qualified domain name (FQDN) for your TFE instance (_e.g._ `tfe.azure.example.com`)
+## Deploy
 
-#### Network security group (NSG)/firewall rules
+Run the commands from the repo root. [`scripts/README.md`](scripts/README.md) explains each script.
 
-- Allow `TCP/443` ingress to load balancer subnet (if TFE load balancer is to be _internal_) or VM subnet (if TFE load balancer is to be _external_) from CIDR ranges of TFE users/clients, your VCS, and other systems (such as CI/CD) that will need to access TFE
-- (Optional) Allow `TCP/9091` (HTTPS) and/or `TCP/9090` (HTTP) ingress to VM subnet from monitoring/observability tool CIDR range (for scraping TFE metrics endpoints)
-- (Optional) Allow `TCP/9443` ingress for the TFE admin console when `tfe_admin_console_disabled` is `false`
-- Allow `TCP/5432` ingress to database subnet from VM subnet (for PostgreSQL traffic)
-- Allow `TCP/6380` ingress to Redis cache subnetfrom VM subnet (for Redis TLS traffic)
-- Allow `TCP/8201` between VMs on VM subnet (for TFE embedded Vault internal cluster traffic between TFE nodes when `tfe_operational_mode` is `active-active`)
+1. **Bootstrap the prerequisites.** Edit the names at the top of the script first if yours differ.
 
-### TLS certificates
-
-- TLS certificate (_e.g._ `cert.pem`) and private key (_e.g._ `privkey.pem`) that matches your chosen fully qualified domain name (FQDN) for TFE
-  - TLS certificate and private key must be in PEM format
-  - Private key must **not** be password protected
-- TLS certificate authority (CA) bundle (_e.g._ `ca_bundle.pem`) corresponding with the CA that issues your TFE TLS certificates
-  - CA bundle must be in PEM format
-  - You may include additional certificate chains corresponding to external systems that TFE will make outbound connections to (_e.g._ your self-hosted VCS, if its certificate was issued by a different CA than your TFE certificate)
-
-### Key Vault secrets
-
-Azure Key Vault containing the following TFE _bootstrap_ secrets:
-
-- **TFE license** - raw contents of TFE license file (i.e. the string value of `cat terraform.hclic`)
-- **TFE encryption password** - used for TFE's embedded Vault; randomly generate this yourself, this is kept completely internal to the TFE system
-- **TFE database password** - used to create PostgreSQL Flexible Server; randomly generate this yourself (avoid the `$` character as Azure PostgreSQL Flexible Server does not like it), fetched from within the module via data source and applied to the PostgreSQL Flexible Server resource
-- **TFE TLS certificate** - base64-encoded string of certificate file in PEM format
-- **TFE TLS private key** - base64-encoded string of private key file in PEM format
-- **TFE custom CA bundle** - base64-encoded string of custom CA bundle file in PEM format
-
- >📝 Note: See the [TFE TLS Certificate Rotation](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-cert-rotation.md) doc for instructions on how to base64-encode the certificates with proper formatting before storing them as Key Vault secrets.
-
-### Compute
-
-- Supported operating systems:
-  - RHEL 8.x, 9.x
-  - Ubuntu 22.x, 24.x
-
-- One of the following mechanisms for shell access to TFE Azure Linux VMs within the Virtual Machine Scale Set (VMSS):
-  - SSH key pair (public key would be a module input)
-  - Username/password (password would be a module input)
-
-- Bastion host (if VM subnet is not reachable from clients/workstations)
-
-### Log forwarding (optional)
-
-One of the following logging destinations for the TFE container logs:
-
-- Azure Log Analytics Workspace
-- A custom Fluent Bit configuration to forward logs to a custom destination
-
-## Usage
-
-1. Create/configure/validate the applicable [prerequisites](#prerequisites).
-
-1. Within the [examples/main](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/examples/main) directory is a ready-made Terraform configuration which contains example scenarios on how to call and deploy this module. To get started, choose the example scenario that most closely matches your requirements. You can customize your deployment later by adding additional module [inputs](#inputs) as you see fit (see the [Deployment-Customizations](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/deployment-customizations.md) for more details).
-
-1. Copy all of the Terraform files from your example scenario of choice into a new destination directory to create your Terraform configuration that will manage your TFE deployment. This is a common directory structure for managing multiple TFE deployments:
-
-    ```pre
-    .
-    └── environments
-        ├── production
-        │   ├── backend.tf
-        │   ├── main.tf
-        │   ├── outputs.tf
-        │   ├── terraform.tfvars
-        │   └── variables.tf
-        └── sandbox
-            ├── backend.tf
-            ├── main.tf
-            ├── outputs.tf
-            ├── terraform.tfvars
-            └── variables.tf
-    ```
-
-    >📝 Note: In this example, the user will have two separate TFE deployments; one for their `sandbox` environment, and one for their `production` environment. This is recommended, but not required.
-
-1. (Optional) Uncomment and update the [AzureRM Remote State backend](https://www.terraform.io/docs/language/settings/backends/azurerm.html) configuration provided in the `backend.tf` file with your own custom values. While this step is highly recommended so that your state file managing your TFE deployment is not stored on your local disk and others can safely collaborate, it is technically not required to use a remote backend config for your TFE deployment.
-
-1. Populate your own custom values into the `terraform.tfvars.example` file that was provided (in particular, the values enclosed in the `<>` characters). Then, remove the `.example` file extension such that the file is now named `terraform.tfvars`. If you would like to further customize your deployment beyond what is in your chosen example scenario, see the [deployment customizations](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/deployment-customizations.md) doc for more details on common customizations.
-
-1. Navigate to the directory of your newly created Terraform configuration for your TFE deployment, and run `terraform init`, `terraform plan`, and `terraform apply`.
-
-1. After your `terraform apply` finishes successfully, you can monitor the installation progress by connecting to your TFE VM shell (via SSH or other preferred method) and observing the cloud-init (custom_data) script logs:<br>
-
-   **Connecting to the Azure VM**
-
-   ```shell
-   ssh -i /path/to/vm_ssh_private_key tfeadmin@<vm-private-ip>
+   ```bash
+   bash tfe-azure/scripts/bootstrap.sh
    ```
 
-   **Viewing the logs**
+2. **Configure.** Copy the example files and fill them in. Secrets go in `.env`, not in tfvars.
 
-   View the higher-level logs:
-
-   ```shell
-   tail -f /var/log/tfe-cloud-init.log
+   ```bash
+   cp tfe-azure/main/terraform.tfvars.example tfe-azure/main/terraform.tfvars
+   cp tfe-azure/.env.local.example tfe-azure/.env
    ```
 
-   View the lower-level logs:
+3. **Apply.**
 
-   ```shell
-   journalctl -xu cloud-final -f
+   ```bash
+   set -a; source tfe-azure/.env; set +a
+   terraform -chdir=tfe-azure/main init
+   terraform -chdir=tfe-azure/main apply
    ```
 
-   >📝 Note: the `-f` argument is to follow the logs as they append in real-time, and is optional. You may remove the `-f` for a static view.
+4. **Run the startup script, if needed.** Only when the VM uses a HashiCorp-built image:
 
-   **Successful install log message**
-
-   The log files should display the following message after the cloud-init (custom_data) script finishes successfully:
-
-   ```shell
-   [INFO] TFE custom_data script finished successfully!
+   ```bash
+   export SSH_KEY=~/.ssh/<private-key>
+   bash tfe-azure/scripts/deploy-tfe.sh
    ```
 
-1. After the cloud-init (custom_data) script finishes successfully, while still connected to the TFE VM shell, you can check the health status of TFE:
+5. **Check the install.** Connect to the VM through the Azure Bastion tunnel (`deploy-tfe.sh` opens one on port `2222`), then:
 
-   ```shell
-   cd /etc/tfe
-   sudo docker compose exec tfe tfe-health-check-status
+   ```bash
+   tail -f /var/log/tfe-cloud-init.log          # look for: TFE custom_data script finished successfully!
+   cd /etc/tfe && sudo docker compose exec tfe tfe-health-check-status
    ```
 
-1. Follow the steps to [create the TFE initial admin user](https://developer.hashicorp.com/terraform/enterprise/flexible-deployments/install/initial-admin-user).
+6. **Create the first admin user** and log in. See [First-time login](#first-time-login).
+
+7. **Configure TFE with Terraform.** See [Configuring TFE from your Mac](#configuring-tfe-from-your-mac).
+
+`terraform -chdir=tfe-azure/main output` lists the useful values: the TFE `url`, resource group, VM scale set name, load balancer IP, Ubuntu bastion IP, dashboard URL and so on.
 
 ## First-time login
 
-TFE has no default credentials. On first install you must create the initial admin account using a one-time IACT (Initial Admin Creation Token).
+TFE has no default credentials. Create the first admin account with a one-time IACT (Initial Admin Creation Token).
 
-**Step 1 — Get the IACT token (run on your Mac with the bastion tunnel open):**
+**1. Get the token** (on your Mac, with the bastion tunnel open):
 
 ```bash
 ssh -p 2222 -i "$SSH_KEY" tfeadmin@127.0.0.1 \
   "sudo docker exec tfe-tfe-1 tfectl admin token"
 ```
 
-The token is valid for 60 minutes. If it has expired, reset it:
+The token is valid for 60 minutes. If it has expired, add `--reset` to the command.
 
-```bash
-ssh -p 2222 -i "$SSH_KEY" tfeadmin@127.0.0.1 \
-  "sudo docker exec tfe-tfe-1 tfectl admin token --reset"
-```
-
-**Step 2 — Create the admin account:**
-
-Open Chrome on the Ubuntu bastion (see [Ubuntu Bastion](#ubuntu-bastion)) and navigate to:
+**2. Create the admin account.** Open Chrome on the [Ubuntu bastion](#ubuntu-bastion) and go to:
 
 ```
 https://tfe.azure.example.com/admin/account/new?token=<PASTE-TOKEN-HERE>
 ```
 
-Fill in your chosen username, email, and password — this becomes the first admin account.
+Choose a username, email and password. This becomes the first admin account.
 
-**Step 3 — Log in:**
+**3. Log in** at `https://tfe.azure.example.com`, then create an organisation from **New organisation**.
 
-Go to `https://tfe.azure.example.com` and log in with the credentials you just created.
+> 📝 `tfe_iact_time_limit` sets how long the token is valid (default 60 minutes). `tfe_iact_subnets` restricts which subnets can use it.
+>
+> 📝 The module switches between `/_health_check` and `/api/v1/health/readiness` based on `tfe_image_tag`, so the load balancer probe matches the deployed TFE version.
 
-> 📝 Note: `tfe_iact_time_limit` in `terraform.tfvars` controls how long the token is valid (default 60 minutes). `tfe_iact_subnets` can be set to restrict which subnets are allowed to use the token.
+## Configuring TFE from your Mac
 
->📝 Note: This module automatically switches between `/_health_check` and `/api/v1/health/readiness` based on `tfe_image_tag` so the Azure load balancer probe and bootstrap polling stay aligned with the deployed TFE version.
+TFE is not directly reachable from your Mac. [`scripts/run-tf-demo-workspace-config.sh`](scripts/run-tf-demo-workspace-config.sh) opens an SSH SOCKS proxy through the Ubuntu bastion, sets `HTTPS_PROXY=socks5h://…` (Terraform ignores `ALL_PROXY`), runs the command, and closes the proxy.
 
-## Running the test workspace
+It runs [`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md), which creates the demo workspace, enables the Sentinel policy set on it, and optionally adds Teams or email notifications.
 
-Once TFE is deployed and you have created the initial admin account, you can verify end-to-end functionality by running a small test Terraform workspace using the [`scripts/run-test-workspace.sh`](scripts/run-test-workspace.sh) script. It installs Terraform 1.9.x on the VM, creates a workspace in your existing TFE organisation, and runs a `terraform apply` of a `random_string` resource.
-
-### Prerequisites
-
-- `az` CLI installed and `az login` already done on your Mac
-- `ssh` and `scp` available on your Mac
-- TFE is running (`deploy-tfe.sh` completed successfully)
-- You have created the initial admin account (see [First-time login](#first-time-login))
-- A TFE organisation already exists (created via the UI under **New organisation**)
-
-### Step 1 — Create a user API token in TFE
-
-1. Open `https://tfe.azure.example.com` in the Ubuntu bastion browser
-2. Click your avatar (top-right) → **User Settings** → **Tokens**
-3. Click **Create an API token**, give it a name (e.g. `cli-test`), and copy the value
-
-> ⚠️ Do **not** use the IACT token from `tfectl admin token` here — that is a one-time bootstrap token for creating the first admin user and will be rejected for all other API operations.
-
-### Step 2 — Export environment variables
-
-```bash
-export SSH_KEY=~/.ssh/<your-private-key>
-export TFE_ORG=<your-org-name>           # must already exist in TFE
-export TFE_TOKEN=<paste-token-from-step-1>
-```
-
-### Step 3 — Run the script
-
-From the repo root:
-
-```bash
-bash tfe-azure/scripts/run-test-workspace.sh         # init + apply (default)
-bash tfe-azure/scripts/run-test-workspace.sh plan    # init + plan only
-```
-
-The script will:
-
-1. Look up the TFE VM private IP from the VMSS
-2. Open an Azure Bastion SSH tunnel on port `2222` (override with `TUNNEL_PORT=<n>`)
-3. Install Terraform **1.9.8** on the VM if not already at that version (required — TFE 1.0.1 is incompatible with CLI ≥ 1.10)
-4. Add `tfe.azure.example.com → 127.0.0.1` to `/etc/hosts` on the VM
-5. Install the TFE CA bundle into the OS trust store so TLS is trusted
-6. Copy `test-workspace/` to the VM and substitute your org name
-7. Write `~/.terraform.d/credentials.tfrc.json` with your API token
-8. Run `terraform init` and `terraform apply -auto-approve`
-9. Close the tunnel on exit
-
-### Expected output
-
-```
-[run-test] Terraform 1.9.8 already installed — skipping.
-[run-test] Writing Terraform credentials file on VM...
-[run-test] Credentials file written.
-[run-test] Running terraform init...
-[run-test] Running terraform apply...
-
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-
-Outputs:
-  random_string = "aB3dEf7gHi"
-
-[run-test] Done. Check the TFE UI at https://tfe.azure.example.com for the run results.
-```
-
-The run will also appear in the TFE UI under **Organisations → `<TFE_ORG>` → Workspaces → tf-demo-workspace**.
-
-### Re-running
-
-The script is fully idempotent — safe to run multiple times. On subsequent runs:
-- Terraform install is skipped (version already matches)
-- `/etc/hosts` entry is not duplicated (checked with `grep -q` first)
-- CA bundle is re-copied (harmless overwrite)
-- Workspace directory is wiped and re-copied fresh
-- `terraform apply` is a no-op (no diff in state)
-
-## Managing TFE with Terraform from your Mac
-
-[`tf-demo-workspace-config/`](tf-demo-workspace-config/README.md) is a Terraform configuration that uses the `tfe` provider to create a workspace (with health assessments) and optional Teams/email notifications. Its README lists the variables.
-
-TFE is not directly reachable from your Mac, so [`scripts/run-tf-demo-workspace-config.sh`](scripts/run-tf-demo-workspace-config.sh) opens an SSH SOCKS proxy through the [Ubuntu bastion](#ubuntu-bastion), sets `HTTPS_PROXY=socks5h://…` (Terraform ignores `ALL_PROXY`), runs the command, then closes the proxy. `terraform init` runs without the proxy.
-
-Prerequisites: the Ubuntu bastion exists and allows SSH from your IP, `tf-demo-workspace-config/terraform.tfvars` has a real `tfe_organization`, and `TFE_TOKEN` is a user API token (not the IACT token).
+You need the Ubuntu bastion, an organisation, and a **user** API token (**User Settings** → **Tokens**; not the IACT token). Set the organisation in `tf-demo-workspace-config/terraform.tfvars`.
 
 ```bash
 export TFE_TOKEN=<your-user-api-token>
@@ -280,52 +132,55 @@ bash tfe-azure/scripts/run-tf-demo-workspace-config.sh apply
 bash tfe-azure/scripts/run-tf-demo-workspace-config.sh destroy
 ```
 
-> 📝 Note: Email notifications are only delivered if SMTP is configured in TFE.
+> 📝 Email notifications are only delivered if SMTP is configured in TFE.
 
-## Docs
+## Running the test workspace
 
-Below are links to various docs related to the customization and management of your TFE deployment:
+[`scripts/run-test-workspace.sh`](scripts/run-test-workspace.sh) is an optional end-to-end check. It copies [`test-workspace/`](test-workspace/main.tf) to the TFE VM through the Azure Bastion tunnel and runs a `random_string` apply against TFE, so a run appears in the UI. It is safe to re-run.
 
-- [Deployment Customizations](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/deployment-customizations.md)
-- [TFE Version Upgrades](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-version-upgrades.md)
-- [TFE TLS Certificate Rotation](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-cert-rotation.md)
-- [TFE Configuration Settings](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/tfe-config-settings.md)
-- [Azure GovCloud Deployment](https://github.com/hashicorp/terraform-azurerm-terraform-enterprise-hvd/docs/govcloud-deployment.md)
+```bash
+export SSH_KEY=~/.ssh/<your-private-key>
+export TFE_ORG=<your-org-name>           # must already exist
+export TFE_TOKEN=<your-user-api-token>   # not the IACT token
+bash tfe-azure/scripts/run-test-workspace.sh         # init + apply (default)
+bash tfe-azure/scripts/run-test-workspace.sh plan    # init + plan only
+```
 
-## Ubuntu Bastion
+The script installs Terraform **1.9.8** on the VM, because TFE 1.0.1 is incompatible with CLI `>= 1.10`.
 
-An Ubuntu VM with an XFCE desktop, xrdp and Google Chrome can be optionally deployed to open the TFE UI in a graphical browser.
+## Ubuntu bastion
 
-Enable it in `main/terraform.tfvars`:
+An optional Ubuntu VM with an XFCE desktop, xrdp and Google Chrome, for opening the TFE UI in a graphical browser. Enable it in `main/terraform.tfvars`:
 
 ```hcl
 create_ubuntu_bastion        = true
 ubuntu_bastion_allowed_cidrs = ["<your-public-ip>/32"]
-# ubuntu_bastion_image_name      = "hc-base-ubuntu-2404-amd64" # default
-# ubuntu_bastion_vm_size         = "Standard_D4ds_v5"          # default Standard_D2s_v3
-# ubuntu_bastion_tfe_hosts_ip    = "<TFE-VM-IP>"               # default: load balancer IP
-# ubuntu_bastion_run_setup_script = false                      # default true; see Notes
+# ubuntu_bastion_image_name       = "hc-base-ubuntu-2404-amd64" # default
+# ubuntu_bastion_vm_size          = "Standard_D4ds_v5"          # default Standard_D2s_v3
+# ubuntu_bastion_tfe_hosts_ip     = "<TFE-VM-IP>"               # default: load balancer IP
+# ubuntu_bastion_run_setup_script = false                       # default true; see Notes
 ```
 
-Supply the login password through the environment (see `.env.local.example`): `TF_VAR_ubuntu_bastion_admin_password`. Optionally set `ubuntu_bastion_ssh_public_key` for SSH key login.
+The password comes from the environment: `TF_VAR_ubuntu_bastion_admin_password` (see `.env.local.example`). You can also set `ubuntu_bastion_ssh_public_key`. The network security group allows TCP 3389 (xrdp) and 22 (SSH) from `ubuntu_bastion_allowed_cidrs` only.
 
-> 📝 Note: `Standard_D2s_v3` may be unavailable in some regions (`SkuNotAvailable`); choose another size with `ubuntu_bastion_vm_size`.
+**Connect from your Mac:** get the IP with `terraform -chdir=tfe-azure/main output ubuntu_bastion_public_ip`, then use **Microsoft Remote Desktop** → **Add PC**, username `bastionadmin` and your password. In Chrome, browse to `https://<tfe_fqdn>`.
 
-The NSG allows TCP 3389 (xrdp) and TCP 22 (SSH) from `ubuntu_bastion_allowed_cidrs` only.
+**Notes**
 
-### Connecting from your Mac
+- `Standard_D2s_v3` may be unavailable in some regions (`SkuNotAvailable`). Choose another size with `ubuntu_bastion_vm_size`.
+- By default the setup runs on first boot through cloud-init and takes a few minutes. Progress is in `/var/log/ubuntu-bastion-setup.log` on the VM.
+- If creation hangs, or you prefer to run setup yourself, set `ubuntu_bastion_run_setup_script = false` and run [`scripts/setup-ubuntu-bastion.sh`](scripts/setup-ubuntu-bastion.sh) after `apply`. It is safe to re-run.
+- If the password is rejected over SSH or RDP, reset it with `az vm user update -g <resource-group> -n <vm-name> -u bastionadmin -p '<password>'`.
+- The setup maps `tfe_fqdn` to the load balancer IP in `/etc/hosts`. If the load balancer is not reachable from the bastion, set `ubuntu_bastion_tfe_hosts_ip` to the TFE VM private IP, and re-check it if the VM is replaced.
 
-- Get the public IP: `terraform -chdir=main output ubuntu_bastion_public_ip`
-- Use **Microsoft Remote Desktop** → **Add PC** → the IP address
-- Username `bastionadmin` (or `ubuntu_bastion_admin_username`) and the password you supplied
-- On the desktop, open **Google Chrome** and browse to `https://<tfe_fqdn>`
+## Docs
 
-### Notes
-
-- By default the setup script runs on first boot via cloud-init and takes a few minutes (it installs the desktop and Chrome). Progress is logged to `/var/log/ubuntu-bastion-setup.log` on the VM; if xrdp is not up yet, SSH in and check that log.
-- If VM creation hangs or you prefer to run setup separately, set `ubuntu_bastion_run_setup_script = false` and run [`scripts/setup-ubuntu-bastion.sh`](scripts/setup-ubuntu-bastion.sh) after `terraform apply`. It runs the same setup over SSH (password login) and is safe to re-run.
-- If the password is rejected over SSH/RDP, reset it with `az vm user update -g <resource-group> -n <vm-name> -u bastionadmin -p '<password>'`.
-- The script maps `tfe_fqdn` to the load balancer IP in `/etc/hosts`. If the load balancer is not reachable from the bastion, set `ubuntu_bastion_tfe_hosts_ip` to the TFE VM private IP. Instance IPs can change, so re-check it if the TFE VM is replaced.
+- [Deployment customizations](docs/deployment-customizations.md)
+- [TFE version upgrades](docs/tfe-version-upgrades.md)
+- [TFE TLS certificate rotation](docs/tfe-cert-rotation.md)
+- [TFE configuration settings](docs/tfe-config-settings.md)
+- [Azure GovCloud deployment](docs/govcloud-deployment.md)
+- [Scripts](scripts/README.md), [Sentinel policies](sentinel/README.md), [Changelog](CHANGELOG.md)
 
 ## Module support
 
@@ -340,21 +195,27 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9 |
 | <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) | >= 4.60, < 5.0 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | >= 4.60, < 5.0 |
+| <a name="provider_azurerm.image_factory"></a> [azurerm.image\_factory](#provider\_azurerm.image\_factory) | >= 4.60, < 5.0 |
 
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
+| [azurerm_bastion_host.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/bastion_host) | resource |
 | [azurerm_dns_a_record.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/dns_a_record) | resource |
+| [azurerm_dns_zone.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/dns_zone) | resource |
+| [azurerm_eventhub.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub) | resource |
+| [azurerm_eventhub_authorization_rule.fluent_bit](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub_authorization_rule) | resource |
+| [azurerm_eventhub_namespace.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/eventhub_namespace) | resource |
 | [azurerm_key_vault_access_policy.postgres_cmk](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault_access_policy) | resource |
 | [azurerm_key_vault_access_policy.storage_account_cmk](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault_access_policy) | resource |
 | [azurerm_key_vault_access_policy.tfe_kv_reader](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault_access_policy) | resource |
@@ -363,9 +224,15 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_lb_probe.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/lb_probe) | resource |
 | [azurerm_lb_rule.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/lb_rule) | resource |
 | [azurerm_lb_rule.tfe_admin_console](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/lb_rule) | resource |
+| [azurerm_linux_virtual_machine.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine) | resource |
 | [azurerm_linux_virtual_machine_scale_set.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine_scale_set) | resource |
+| [azurerm_log_analytics_workspace.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/log_analytics_workspace) | resource |
 | [azurerm_managed_redis.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/managed_redis) | resource |
 | [azurerm_managed_redis.tfe_sidekiq](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/managed_redis) | resource |
+| [azurerm_network_interface.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface) | resource |
+| [azurerm_network_interface_security_group_association.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface_security_group_association) | resource |
+| [azurerm_network_security_group.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_security_group) | resource |
+| [azurerm_portal_dashboard.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/portal_dashboard) | resource |
 | [azurerm_postgresql_flexible_server.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_flexible_server) | resource |
 | [azurerm_postgresql_flexible_server_configuration.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_flexible_server_configuration) | resource |
 | [azurerm_postgresql_flexible_server_database.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_flexible_server_database) | resource |
@@ -380,8 +247,13 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_private_dns_zone_virtual_network_link.redis](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_dns_zone_virtual_network_link) | resource |
 | [azurerm_private_endpoint.blob_storage](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_endpoint) | resource |
 | [azurerm_private_endpoint.redis](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_endpoint) | resource |
+| [azurerm_public_ip.bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/public_ip) | resource |
 | [azurerm_public_ip.tfe_lb](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/public_ip) | resource |
+| [azurerm_public_ip.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/public_ip) | resource |
 | [azurerm_redis_cache.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/redis_cache) | resource |
+| [azurerm_resource_group.event_hub](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
+| [azurerm_resource_group.log_analytics](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
+| [azurerm_resource_group.networking](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_resource_group.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_role_assignment.postgres_cmk_crypto_service_encryption_user](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.storage_account_cmk_crypto_service_encryption_user](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
@@ -392,29 +264,34 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | [azurerm_storage_account.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account) | resource |
 | [azurerm_storage_account_network_rules.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_account_network_rules) | resource |
 | [azurerm_storage_container.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_container) | resource |
+| [azurerm_subnet.bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
+| [azurerm_subnet.db](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
+| [azurerm_subnet.lb](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
+| [azurerm_subnet.redis](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
+| [azurerm_subnet.vm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
 | [azurerm_user_assigned_identity.postgres](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [azurerm_user_assigned_identity.storage_account](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [azurerm_user_assigned_identity.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
+| [azurerm_virtual_network.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network) | resource |
 | [azurerm_client_config.current](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/client_config) | data source |
 | [azurerm_disk_encryption_set.vmss](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/disk_encryption_set) | data source |
 | [azurerm_dns_zone.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/dns_zone) | data source |
-| [azurerm_image.custom](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/image) | data source |
 | [azurerm_key_vault.bootstrap](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/key_vault) | data source |
 | [azurerm_key_vault_secret.tfe_database_password](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/key_vault_secret) | data source |
 | [azurerm_log_analytics_workspace.logging](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/log_analytics_workspace) | data source |
-| [azurerm_platform_image.latest_os_image](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/platform_image) | data source |
 | [azurerm_private_dns_zone.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/private_dns_zone) | data source |
+| [azurerm_shared_image.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/shared_image) | data source |
+| [azurerm_shared_image.ubuntu_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/shared_image) | data source |
 | [azurerm_storage_account.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/storage_account) | data source |
 | [azurerm_storage_container.tfe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/storage_container) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_bootstrap_keyvault_name"></a> [bootstrap\_keyvault\_name](#input\_bootstrap\_keyvault\_name) | Name of the 'bootstrap' Key Vault to use for bootstrapping TFE deployment. | `string` | n/a | yes |
 | <a name="input_bootstrap_keyvault_rg_name"></a> [bootstrap\_keyvault\_rg\_name](#input\_bootstrap\_keyvault\_rg\_name) | Name of the Resource Group where the 'bootstrap' Key Vault resides. | `string` | n/a | yes |
 | <a name="input_container_runtime"></a> [container\_runtime](#input\_container\_runtime) | Value of container runtime to use for TFE deployment. For Redhat, the default is `podman`, but optionally `docker` can be used. For Ubuntu, the default is `docker`. | `string` | n/a | yes |
-| <a name="input_db_subnet_id"></a> [db\_subnet\_id](#input\_db\_subnet\_id) | Subnet ID for PostgreSQL database. | `string` | n/a | yes |
 | <a name="input_friendly_name_prefix"></a> [friendly\_name\_prefix](#input\_friendly\_name\_prefix) | Friendly name prefix used for uniquely naming all Azure resources for this deployment. Most commonly set to either an environment (e.g. 'sandbox', 'prod'), a team name, or a project name. | `string` | n/a | yes |
 | <a name="input_location"></a> [location](#input\_location) | Azure region for this TFE deployment. | `string` | n/a | yes |
 | <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name) | Name of resource group for this TFE deployment. Must be an existing resource group if `create_resource_group` is `false`. | `string` | n/a | yes |
@@ -425,30 +302,49 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_tfe_tls_ca_bundle_keyvault_secret_id"></a> [tfe\_tls\_ca\_bundle\_keyvault\_secret\_id](#input\_tfe\_tls\_ca\_bundle\_keyvault\_secret\_id) | ID of Key Vault secret containing TFE TLS custom CA bundle. | `string` | n/a | yes |
 | <a name="input_tfe_tls_cert_keyvault_secret_id"></a> [tfe\_tls\_cert\_keyvault\_secret\_id](#input\_tfe\_tls\_cert\_keyvault\_secret\_id) | ID of Key Vault secret containing TFE TLS certificate. | `string` | n/a | yes |
 | <a name="input_tfe_tls_privkey_keyvault_secret_id"></a> [tfe\_tls\_privkey\_keyvault\_secret\_id](#input\_tfe\_tls\_privkey\_keyvault\_secret\_id) | ID of Key Vault secret containing TFE TLS private key. | `string` | n/a | yes |
-| <a name="input_vm_subnet_id"></a> [vm\_subnet\_id](#input\_vm\_subnet\_id) | Subnet ID for Virtual Machine Scaleset (VMSS). | `string` | n/a | yes |
-| <a name="input_vnet_id"></a> [vnet\_id](#input\_vnet\_id) | ID of VNet where TFE will be deployed. | `string` | n/a | yes |
 | <a name="input_availability_zones"></a> [availability\_zones](#input\_availability\_zones) | List of Azure availability zones to spread TFE resources across. | `set(string)` | <pre>[<br/>  "1",<br/>  "2",<br/>  "3"<br/>]</pre> | no |
+| <a name="input_bastion_subnet_cidr"></a> [bastion\_subnet\_cidr](#input\_bastion\_subnet\_cidr) | CIDR for the AzureBastionSubnet. Must be at least /26. Used when `create_bastion_host` is `true`. | `string` | `"10.0.5.0/26"` | no |
 | <a name="input_bootstrap_keyvault_create_reader_role_assignment"></a> [bootstrap\_keyvault\_create\_reader\_role\_assignment](#input\_bootstrap\_keyvault\_create\_reader\_role\_assignment) | Boolean to create an Azure RBAC Reader role assignment on the bootstrap Key Vault for the TFE user-assigned identity. Disable this when Key Vault access policies are sufficient and the deploying principal cannot write role assignments. | `bool` | `true` | no |
 | <a name="input_cidr_allow_ingress_tfe_admin_console"></a> [cidr\_allow\_ingress\_tfe\_admin\_console](#input\_cidr\_allow\_ingress\_tfe\_admin\_console) | List of CIDR ranges that should be allowed to reach the admin console port. This module does not create NSG rules, so use this as the contract for your prerequisite firewall policy. | `list(string)` | `null` | no |
 | <a name="input_common_tags"></a> [common\_tags](#input\_common\_tags) | Map of common tags for taggable Azure resources. | `map(string)` | `{}` | no |
+| <a name="input_create_bastion_host"></a> [create\_bastion\_host](#input\_create\_bastion\_host) | Boolean to create an Azure Bastion host for VM access. Only valid when `create_networking_resources` is `true`. | `bool` | `true` | no |
 | <a name="input_create_blob_storage_private_endpoint"></a> [create\_blob\_storage\_private\_endpoint](#input\_create\_blob\_storage\_private\_endpoint) | Boolean to create a private endpoint and private DNS zone for TFE Storage Account. | `bool` | `true` | no |
+| <a name="input_create_dashboard"></a> [create\_dashboard](#input\_create\_dashboard) | Boolean to create an Azure Portal shared dashboard showing TFE workspace run summaries. Requires `tfe_log_forwarding_enabled = true` and `log_fwd_destination_type = "log_analytics"`. | `bool` | `false` | no |
+| <a name="input_create_event_hub"></a> [create\_event\_hub](#input\_create\_event\_hub) | Boolean to automatically create an Azure Event Hubs namespace and Event Hub topic for log forwarding. | `bool` | `false` | no |
 | <a name="input_create_lb"></a> [create\_lb](#input\_create\_lb) | Boolean to create an Azure Load Balancer for TFE. | `bool` | `true` | no |
+| <a name="input_create_log_analytics_workspace"></a> [create\_log\_analytics\_workspace](#input\_create\_log\_analytics\_workspace) | Boolean to create the Log Analytics resource group and workspace. | `bool` | `false` | no |
+| <a name="input_create_networking_resources"></a> [create\_networking\_resources](#input\_create\_networking\_resources) | Boolean to create the networking resource group, VNet, and subnets. Set to false if these already exist. | `bool` | `false` | no |
 | <a name="input_create_postgres_private_endpoint"></a> [create\_postgres\_private\_endpoint](#input\_create\_postgres\_private\_endpoint) | Boolean to create a private endpoint and private DNS zone for PostgreSQL Flexible Server. | `bool` | `true` | no |
+| <a name="input_create_public_dns_zone"></a> [create\_public\_dns\_zone](#input\_create\_public\_dns\_zone) | Boolean to create a new public Azure DNS zone for TFE. When `true`, a new `azurerm_dns_zone` is created using `public_dns_zone_name` in the TFE resource group, and a DNS A record is automatically added that resolves `tfe_fqdn` to the load balancer public IP. Requires `lb_is_internal` to be `false` and `create_lb` to be `true`. | `bool` | `false` | no |
 | <a name="input_create_redis_private_endpoint"></a> [create\_redis\_private\_endpoint](#input\_create\_redis\_private\_endpoint) | Boolean to create a private DNS zone and private endpoint for the Redis service used by TFE. | `bool` | `true` | no |
 | <a name="input_create_resource_group"></a> [create\_resource\_group](#input\_create\_resource\_group) | Boolean to create a new resource group for this TFE deployment. | `bool` | `true` | no |
 | <a name="input_create_tfe_private_dns_record"></a> [create\_tfe\_private\_dns\_record](#input\_create\_tfe\_private\_dns\_record) | Boolean to create a DNS record for TFE in a private Azure DNS zone. A `private_dns_zone_name` must also be provided when `true`. | `bool` | `false` | no |
-| <a name="input_create_tfe_public_dns_record"></a> [create\_tfe\_public\_dns\_record](#input\_create\_tfe\_public\_dns\_record) | Boolean to create a DNS record for TFE in a public Azure DNS zone. A `public_dns_zone_name` must also be provided when `true`. | `bool` | `false` | no |
+| <a name="input_create_tfe_public_dns_record"></a> [create\_tfe\_public\_dns\_record](#input\_create\_tfe\_public\_dns\_record) | Boolean to create a DNS record for TFE in a public Azure DNS zone. A `public_dns_zone_name` must also be provided when `true`. Set this when using an *existing* public DNS zone; use `create_public_dns_zone` instead to have Terraform create a new zone. | `bool` | `false` | no |
+| <a name="input_create_ubuntu_bastion"></a> [create\_ubuntu\_bastion](#input\_create\_ubuntu\_bastion) | Boolean to create an Ubuntu bastion VM with a public IP, an XFCE desktop (xrdp) and Google Chrome, for opening the TFE UI in a graphical browser. | `bool` | `false` | no |
 | <a name="input_custom_fluent_bit_config"></a> [custom\_fluent\_bit\_config](#input\_custom\_fluent\_bit\_config) | Custom Fluent Bit configuration for log forwarding. Only valid if `log_fwd_destination_type` is `custom`. | `string` | `null` | no |
 | <a name="input_custom_tfe_startup_script_template"></a> [custom\_tfe\_startup\_script\_template](#input\_custom\_tfe\_startup\_script\_template) | Name of custom TFE startup script template file. File must exist within a directory named `./templates` within your current working directory. | `string` | `null` | no |
+| <a name="input_db_subnet_cidr"></a> [db\_subnet\_cidr](#input\_db\_subnet\_cidr) | CIDR for the database subnet. Used when `create_networking_resources` is `true`. | `string` | `"10.0.3.0/24"` | no |
+| <a name="input_db_subnet_id"></a> [db\_subnet\_id](#input\_db\_subnet\_id) | Subnet ID for PostgreSQL database. Only required when `create_networking_resources` is `false`. | `string` | `null` | no |
 | <a name="input_docker_version"></a> [docker\_version](#input\_docker\_version) | Version of Docker to install on TFE VMSS. | `string` | `"28.0.1"` | no |
+| <a name="input_event_hub_capacity"></a> [event\_hub\_capacity](#input\_event\_hub\_capacity) | Specifies the Capacity / Throughput Units for a Standard SKU namespace. | `number` | `1` | no |
+| <a name="input_event_hub_connection_string"></a> [event\_hub\_connection\_string](#input\_event\_hub\_connection\_string) | Primary connection string for the Event Hub authorization rule. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`. | `string` | `null` | no |
+| <a name="input_event_hub_message_retention"></a> [event\_hub\_message\_retention](#input\_event\_hub\_message\_retention) | Specifies the number of days to retain the events for this Event Hub. Must be between 1 and 7 days. | `number` | `1` | no |
+| <a name="input_event_hub_name"></a> [event\_hub\_name](#input\_event\_hub\_name) | Name of the Azure Event Hub instance (topic) for log forwarding. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`. | `string` | `null` | no |
+| <a name="input_event_hub_namespace_name"></a> [event\_hub\_namespace\_name](#input\_event\_hub\_namespace\_name) | Name of the Azure Event Hubs namespace for log forwarding. Required when `create_event_hub` is `false` and `log_fwd_destination_type` is `event_hub` or `both`. | `string` | `null` | no |
+| <a name="input_event_hub_partition_count"></a> [event\_hub\_partition\_count](#input\_event\_hub\_partition\_count) | Specifies the current number of shards on the Event Hub. Must be between 1 and 32. | `number` | `2` | no |
+| <a name="input_event_hub_rg_name"></a> [event\_hub\_rg\_name](#input\_event\_hub\_rg\_name) | Resource Group name for the Event Hub resources. Defaults to the TFE resource group if not specified. | `string` | `null` | no |
+| <a name="input_event_hub_sku"></a> [event\_hub\_sku](#input\_event\_hub\_sku) | Defines which tier to use for Event Hub Namespace. Valid options are Basic, Standard, and Premium. | `string` | `"Standard"` | no |
+| <a name="input_image_factory_subscription_id"></a> [image\_factory\_subscription\_id](#input\_image\_factory\_subscription\_id) | Subscription ID of the hashicorp02-image-factory-prod subscription hosting the shared image gallery. | `string` | `"338f0fa5-b5ae-4847-9821-1808613db6c5"` | no |
 | <a name="input_is_govcloud_region"></a> [is\_govcloud\_region](#input\_is\_govcloud\_region) | Boolean indicating whether this TFE deployment is in an Azure Government Cloud region. | `bool` | `false` | no |
 | <a name="input_is_secondary_region"></a> [is\_secondary\_region](#input\_is\_secondary\_region) | Boolean indicating whether this TFE deployment is for 'primary' region or 'secondary' region. | `bool` | `false` | no |
 | <a name="input_lb_is_internal"></a> [lb\_is\_internal](#input\_lb\_is\_internal) | Boolean to create an internal or external Azure Load Balancer for TFE. | `bool` | `true` | no |
 | <a name="input_lb_private_ip"></a> [lb\_private\_ip](#input\_lb\_private\_ip) | Private IP address for internal Azure Load Balancer. Only valid when `lb_is_internal` is `true`. | `string` | `null` | no |
+| <a name="input_lb_subnet_cidr"></a> [lb\_subnet\_cidr](#input\_lb\_subnet\_cidr) | CIDR for the load balancer subnet. Used when `create_networking_resources` is `true`. | `string` | `"10.0.1.0/24"` | no |
 | <a name="input_lb_subnet_id"></a> [lb\_subnet\_id](#input\_lb\_subnet\_id) | Subnet ID for Azure load balancer. | `string` | `null` | no |
-| <a name="input_log_analytics_workspace_name"></a> [log\_analytics\_workspace\_name](#input\_log\_analytics\_workspace\_name) | Name existing Azure Log Analytics Workspace for log forwarding destination. Only valid if `log_fwd_destination_type` is `log_analytics`. | `string` | `null` | no |
+| <a name="input_log_analytics_workspace_name"></a> [log\_analytics\_workspace\_name](#input\_log\_analytics\_workspace\_name) | Name of existing Azure Log Analytics Workspace for log forwarding destination. Required when `log_fwd_destination_type` is `log_analytics` or `both` (unless `create_log_analytics_workspace = true`). | `string` | `null` | no |
 | <a name="input_log_analytics_workspace_rg_name"></a> [log\_analytics\_workspace\_rg\_name](#input\_log\_analytics\_workspace\_rg\_name) | Name of Resource Group where Log Analytics Workspace exists. | `string` | `null` | no |
-| <a name="input_log_fwd_destination_type"></a> [log\_fwd\_destination\_type](#input\_log\_fwd\_destination\_type) | Type of log forwarding destination. Valid values are 'log\_analytics' or 'custom'. | `string` | `"log_analytics"` | no |
+| <a name="input_log_fwd_destination_type"></a> [log\_fwd\_destination\_type](#input\_log\_fwd\_destination\_type) | Type of log forwarding destination. Valid values are 'log\_analytics', 'event\_hub', 'both' (log\_analytics + event\_hub), or 'custom'. | `string` | `"log_analytics"` | no |
+| <a name="input_networking_resource_group_name"></a> [networking\_resource\_group\_name](#input\_networking\_resource\_group\_name) | Name of the networking resource group. Used when `create_networking_resources` is `true`. | `string` | `"tfe-networking-rg"` | no |
 | <a name="input_postgres_administrator_login"></a> [postgres\_administrator\_login](#input\_postgres\_administrator\_login) | Username for administrator login of PostreSQL database. | `string` | `"tfeadmin"` | no |
 | <a name="input_postgres_backup_retention_days"></a> [postgres\_backup\_retention\_days](#input\_postgres\_backup\_retention\_days) | Number of days to retain backups of PostgreSQL Flexible Server. | `number` | `35` | no |
 | <a name="input_postgres_cmk_keyvault_id"></a> [postgres\_cmk\_keyvault\_id](#input\_postgres\_cmk\_keyvault\_id) | ID of the Key Vault containing the customer-managed key (CMK) for encrypting the PostgreSQL Flexible Server database. | `string` | `null` | no |
@@ -464,11 +360,11 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_postgres_sku"></a> [postgres\_sku](#input\_postgres\_sku) | PostgreSQL database SKU. | `string` | `"GP_Standard_D4ds_v4"` | no |
 | <a name="input_postgres_source_server_id"></a> [postgres\_source\_server\_id](#input\_postgres\_source\_server\_id) | ID of the source PostgreSQL Flexible Server to replicate from. Only valid when `is_secondary_region` is `true` and `postgres_create_mode` is `Replica`. | `string` | `null` | no |
 | <a name="input_postgres_storage_mb"></a> [postgres\_storage\_mb](#input\_postgres\_storage\_mb) | Storage capacity of PostgreSQL Flexible Server (unit is megabytes). | `number` | `65536` | no |
-| <a name="input_postgres_version"></a> [postgres\_version](#input\_postgres\_version) | PostgreSQL database version. | `number` | `15` | no |
+| <a name="input_postgres_version"></a> [postgres\_version](#input\_postgres\_version) | PostgreSQL database version. | `number` | `14` | no |
 | <a name="input_private_dns_zone_name"></a> [private\_dns\_zone\_name](#input\_private\_dns\_zone\_name) | Name of existing private Azure DNS zone to create DNS record in. Required when `create_tfe_private_dns_record` is `true`. | `string` | `null` | no |
 | <a name="input_private_dns_zone_rg_name"></a> [private\_dns\_zone\_rg\_name](#input\_private\_dns\_zone\_rg\_name) | Name of Resource Group where `private_dns_zone_name` resides. Required when `create_tfe_private_dns_record` is `true`. | `string` | `null` | no |
-| <a name="input_public_dns_zone_name"></a> [public\_dns\_zone\_name](#input\_public\_dns\_zone\_name) | Name of existing public Azure DNS zone to create DNS record in. Required when `create_tfe_public_dns_record` is `true`. | `string` | `null` | no |
-| <a name="input_public_dns_zone_rg_name"></a> [public\_dns\_zone\_rg\_name](#input\_public\_dns\_zone\_rg\_name) | Name of Resource Group where `public_dns_zone_name` resides. Required when `public_dns_zone_name` is not `null`. | `string` | `null` | no |
+| <a name="input_public_dns_zone_name"></a> [public\_dns\_zone\_name](#input\_public\_dns\_zone\_name) | Name of the public Azure DNS zone. When `create_public_dns_zone` is `true` this zone is created; when `create_tfe_public_dns_record` is `true` this must be an existing zone. Required when either flag is `true`. | `string` | `null` | no |
+| <a name="input_public_dns_zone_rg_name"></a> [public\_dns\_zone\_rg\_name](#input\_public\_dns\_zone\_rg\_name) | Name of Resource Group where `public_dns_zone_name` resides. Required when `create_tfe_public_dns_record` is `true` (existing zone lookup). When `create_public_dns_zone` is `true` the zone is created in the TFE resource group and this variable is ignored. | `string` | `null` | no |
 | <a name="input_redis_capacity"></a> [redis\_capacity](#input\_redis\_capacity) | The size of the legacy Azure Cache for Redis deployment. Valid values for a SKU family of C (Basic/Standard) are 0, 1, 2, 3, 4, 5, 6, and for P (Premium) family are 1, 2, 3, 4. | `number` | `1` | no |
 | <a name="input_redis_family"></a> [redis\_family](#input\_redis\_family) | The SKU family/pricing group to use for the legacy Azure Cache for Redis path. Valid values are C (for Basic/Standard SKU family) and P (for Premium). | `string` | `"P"` | no |
 | <a name="input_redis_managed_high_availability_enabled"></a> [redis\_managed\_high\_availability\_enabled](#input\_redis\_managed\_high\_availability\_enabled) | Boolean to enable high availability for Azure Managed Redis instances when `tfe_image_tag` is semver `>= 1.0.1`. | `bool` | `true` | no |
@@ -476,6 +372,7 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_redis_min_tls_version"></a> [redis\_min\_tls\_version](#input\_redis\_min\_tls\_version) | Minimum TLS version to use with the legacy Azure Cache for Redis path. | `string` | `"1.2"` | no |
 | <a name="input_redis_non_ssl_port_enabled"></a> [redis\_non\_ssl\_port\_enabled](#input\_redis\_non\_ssl\_port\_enabled) | Boolean to enable non-SSL port 6379 for the legacy Azure Cache for Redis path. | `bool` | `false` | no |
 | <a name="input_redis_sku_name"></a> [redis\_sku\_name](#input\_redis\_sku\_name) | Which SKU of Redis to use for the legacy Azure Cache for Redis path. Options are 'Basic', 'Standard', or 'Premium'. | `string` | `"Premium"` | no |
+| <a name="input_redis_subnet_cidr"></a> [redis\_subnet\_cidr](#input\_redis\_subnet\_cidr) | CIDR for the Redis subnet. Used when `create_networking_resources` is `true`. | `string` | `"10.0.4.0/24"` | no |
 | <a name="input_redis_subnet_id"></a> [redis\_subnet\_id](#input\_redis\_subnet\_id) | Subnet ID for Redis cache. | `string` | `null` | no |
 | <a name="input_redis_version"></a> [redis\_version](#input\_redis\_version) | Legacy Azure Cache for Redis version. Only the major version is needed. | `number` | `6` | no |
 | <a name="input_secondary_vm_subnet_id"></a> [secondary\_vm\_subnet\_id](#input\_secondary\_vm\_subnet\_id) | VM subnet ID of existing TFE virtual machine scaleset (VMSS) in secondary region. Used to allow TFE VMs in secondary region access to TFE storage account in primary region. | `string` | `null` | no |
@@ -500,7 +397,7 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_tfe_image_repository_password"></a> [tfe\_image\_repository\_password](#input\_tfe\_image\_repository\_password) | Password for container registry where TFE container image is hosted. Only set this if you are hosting the TFE container image in your own custom repository. | `string` | `null` | no |
 | <a name="input_tfe_image_repository_url"></a> [tfe\_image\_repository\_url](#input\_tfe\_image\_repository\_url) | Repository for the TFE image. Only change this if you are hosting the TFE container image in your own custom repository. | `string` | `"images.releases.hashicorp.com"` | no |
 | <a name="input_tfe_image_repository_username"></a> [tfe\_image\_repository\_username](#input\_tfe\_image\_repository\_username) | Username for container registry where TFE container image is hosted. Only change this if you are hosting the TFE container image in your own custom repository. | `string` | `"terraform"` | no |
-| <a name="input_tfe_image_tag"></a> [tfe\_image\_tag](#input\_tfe\_image\_tag) | Tag for the TFE container image. This represents the version of TFE to deploy. | `string` | `"v202502-1"` | no |
+| <a name="input_tfe_image_tag"></a> [tfe\_image\_tag](#input\_tfe\_image\_tag) | Tag for the TFE container image. This represents the version of TFE to deploy. | `string` | `"1.0.1"` | no |
 | <a name="input_tfe_license_reporting_opt_out"></a> [tfe\_license\_reporting\_opt\_out](#input\_tfe\_license\_reporting\_opt\_out) | Boolean to opt out of license reporting. | `bool` | `false` | no |
 | <a name="input_tfe_log_forwarding_enabled"></a> [tfe\_log\_forwarding\_enabled](#input\_tfe\_log\_forwarding\_enabled) | Boolean to enable TFE log forwarding feature. | `bool` | `false` | no |
 | <a name="input_tfe_metrics_enable"></a> [tfe\_metrics\_enable](#input\_tfe\_metrics\_enable) | Boolean to enable metrics. | `bool` | `false` | no |
@@ -517,26 +414,51 @@ Please note that there is no official Service Level Agreement (SLA) for support 
 | <a name="input_tfe_run_pipeline_image"></a> [tfe\_run\_pipeline\_image](#input\_tfe\_run\_pipeline\_image) | Name of the Docker image to use for the run pipeline driver. | `string` | `null` | no |
 | <a name="input_tfe_tls_enforce"></a> [tfe\_tls\_enforce](#input\_tfe\_tls\_enforce) | Boolean to enforce TLS, Strict-Transport-Security headers, and secure cookies within TFE. | `bool` | `false` | no |
 | <a name="input_tfe_vault_disable_mlock"></a> [tfe\_vault\_disable\_mlock](#input\_tfe\_vault\_disable\_mlock) | Boolean to disable mlock for internal Vault. | `bool` | `false` | no |
+| <a name="input_ubuntu_bastion_admin_password"></a> [ubuntu\_bastion\_admin\_password](#input\_ubuntu\_bastion\_admin\_password) | Admin password for the Ubuntu bastion VM, used for the xrdp login. Must meet Azure complexity requirements (12+ chars, upper, lower, digit, special). Recommended: supply via the TF\_VAR\_ubuntu\_bastion\_admin\_password environment variable rather than in tfvars. | `string` | `null` | no |
+| <a name="input_ubuntu_bastion_admin_username"></a> [ubuntu\_bastion\_admin\_username](#input\_ubuntu\_bastion\_admin\_username) | Admin username for the Ubuntu bastion VM. Used for SSH and for the xrdp login. | `string` | `"bastionadmin"` | no |
+| <a name="input_ubuntu_bastion_allowed_cidrs"></a> [ubuntu\_bastion\_allowed\_cidrs](#input\_ubuntu\_bastion\_allowed\_cidrs) | List of CIDR ranges allowed to connect to the Ubuntu bastion host over RDP (port 3389) and SSH (port 22). Set this to your public IP, e.g. ["1.2.3.4/32"]. | `list(string)` | `[]` | no |
+| <a name="input_ubuntu_bastion_image_name"></a> [ubuntu\_bastion\_image\_name](#input\_ubuntu\_bastion\_image\_name) | Name of the shared image definition in the `hcbaseGallery` image gallery to use for the Ubuntu bastion. | `string` | `"hc-base-ubuntu-2404-amd64"` | no |
+| <a name="input_ubuntu_bastion_run_setup_script"></a> [ubuntu\_bastion\_run\_setup\_script](#input\_ubuntu\_bastion\_run\_setup\_script) | Boolean to run the desktop/xrdp/Chrome setup script automatically on first boot of the Ubuntu bastion. Set to `false` to create the VM only and run `templates/ubuntu_bastion_setup.sh.tpl` manually. | `bool` | `true` | no |
+| <a name="input_ubuntu_bastion_ssh_public_key"></a> [ubuntu\_bastion\_ssh\_public\_key](#input\_ubuntu\_bastion\_ssh\_public\_key) | Optional SSH public key added to the Ubuntu bastion admin user for SSH access. | `string` | `null` | no |
+| <a name="input_ubuntu_bastion_tfe_hosts_ip"></a> [ubuntu\_bastion\_tfe\_hosts\_ip](#input\_ubuntu\_bastion\_tfe\_hosts\_ip) | IP address the Ubuntu bastion maps `tfe_fqdn` to in /etc/hosts. When null, the load balancer IP is used (public IP, or `lb_private_ip` when the load balancer is internal). | `string` | `null` | no |
+| <a name="input_ubuntu_bastion_vm_size"></a> [ubuntu\_bastion\_vm\_size](#input\_ubuntu\_bastion\_vm\_size) | Azure VM size (SKU) for the Ubuntu bastion host. A desktop and browser need roughly 2+ vCPU and 8 GB+ RAM. | `string` | `"Standard_D2s_v3"` | no |
 | <a name="input_use_key_vault_rbac"></a> [use\_key\_vault\_rbac](#input\_use\_key\_vault\_rbac) | Whether to use Azure RBAC instead of legacy access policies for Key Vault data-plane access. | `bool` | `false` | no |
 | <a name="input_vm_admin_username"></a> [vm\_admin\_username](#input\_vm\_admin\_username) | Admin username for VMs in VMSS. | `string` | `"tfeadmin"` | no |
 | <a name="input_vm_custom_image_name"></a> [vm\_custom\_image\_name](#input\_vm\_custom\_image\_name) | Name of custom VM image to use for VMSS. If not using a custom image, leave this blank. | `string` | `null` | no |
 | <a name="input_vm_custom_image_rg_name"></a> [vm\_custom\_image\_rg\_name](#input\_vm\_custom\_image\_rg\_name) | Name of Resource Group where `vm_custom_image_name` image resides. Only valid if `vm_custom_image_name` is not `null`. | `string` | `null` | no |
 | <a name="input_vm_disk_encryption_set_name"></a> [vm\_disk\_encryption\_set\_name](#input\_vm\_disk\_encryption\_set\_name) | Name of Disk Encryption Set to use for VMSS. | `string` | `null` | no |
 | <a name="input_vm_disk_encryption_set_rg"></a> [vm\_disk\_encryption\_set\_rg](#input\_vm\_disk\_encryption\_set\_rg) | Name of Resource Group where the Disk Encryption Set to use for VMSS exists. | `string` | `null` | no |
+| <a name="input_vm_enable_auto_instance_repair"></a> [vm\_enable\_auto\_instance\_repair](#input\_vm\_enable\_auto\_instance\_repair) | Boolean to enable automatic instance repair for VMSS. | `bool` | `true` | no |
 | <a name="input_vm_enable_boot_diagnostics"></a> [vm\_enable\_boot\_diagnostics](#input\_vm\_enable\_boot\_diagnostics) | Boolean to enable boot diagnostics for VMSS. | `bool` | `false` | no |
 | <a name="input_vm_os_image"></a> [vm\_os\_image](#input\_vm\_os\_image) | The OS image to use for the VM. Options are: redhat8, redhat9, ubuntu2204, ubuntu2404. | `string` | `"redhat9"` | no |
 | <a name="input_vm_sku"></a> [vm\_sku](#input\_vm\_sku) | SKU for VM size for the VMSS. | `string` | `"Standard_D4s_v4"` | no |
 | <a name="input_vm_ssh_public_key"></a> [vm\_ssh\_public\_key](#input\_vm\_ssh\_public\_key) | SSH public key for VMs in VMSS. | `string` | `null` | no |
+| <a name="input_vm_subnet_cidr"></a> [vm\_subnet\_cidr](#input\_vm\_subnet\_cidr) | CIDR for the VM subnet. Used when `create_networking_resources` is `true`. | `string` | `"10.0.2.0/24"` | no |
+| <a name="input_vm_subnet_id"></a> [vm\_subnet\_id](#input\_vm\_subnet\_id) | Subnet ID for Virtual Machine Scaleset (VMSS). Only required when `create_networking_resources` is `false`. | `string` | `null` | no |
 | <a name="input_vmss_instance_count"></a> [vmss\_instance\_count](#input\_vmss\_instance\_count) | Number of VM instances to run in the Virtual Machine Scaleset (VMSS). | `number` | `1` | no |
+| <a name="input_vnet_address_space"></a> [vnet\_address\_space](#input\_vnet\_address\_space) | Address space for the Virtual Network. Used when `create_networking_resources` is `true`. | `string` | `"10.0.0.0/16"` | no |
+| <a name="input_vnet_id"></a> [vnet\_id](#input\_vnet\_id) | ID of VNet where TFE will be deployed. Only required when `create_networking_resources` is `false`. | `string` | `null` | no |
+| <a name="input_vnet_name"></a> [vnet\_name](#input\_vnet\_name) | Name of the Virtual Network to create. Used when `create_networking_resources` is `true`. | `string` | `"tfe-vnet"` | no |
 
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
+| <a name="output_azure_bastion_name"></a> [azure\_bastion\_name](#output\_azure\_bastion\_name) | Name of the Azure Bastion host used to SSH to the TFE VM. Only populated when `create_networking_resources` and `create_bastion_host` are `true`. |
+| <a name="output_dashboard_url"></a> [dashboard\_url](#output\_dashboard\_url) | Azure Portal URL to open the TFE Portal Dashboard. Only populated when `create_dashboard` is `true`. |
+| <a name="output_event_hub_id"></a> [event\_hub\_id](#output\_event\_hub\_id) | The ID of the Azure Event Hub topic created for TFE log forwarding. |
+| <a name="output_event_hub_namespace_id"></a> [event\_hub\_namespace\_id](#output\_event\_hub\_namespace\_id) | The ID of the Azure Event Hubs namespace created for TFE log forwarding. |
+| <a name="output_load_balancer_ip"></a> [load\_balancer\_ip](#output\_load\_balancer\_ip) | IP address of the TFE load balancer: the public IP when the load balancer is external, or the private IP when it is internal. `null` when `create_lb` is `false`. |
+| <a name="output_networking_resource_group_name"></a> [networking\_resource\_group\_name](#output\_networking\_resource\_group\_name) | Name of the networking resource group. Only populated when `create_networking_resources` is `true`. |
+| <a name="output_public_dns_zone_name_servers"></a> [public\_dns\_zone\_name\_servers](#output\_public\_dns\_zone\_name\_servers) | List of authoritative name servers for the created public DNS zone. Delegate your domain to these name servers. Only populated when `create_public_dns_zone` is `true`. |
+| <a name="output_resource_group_name"></a> [resource\_group\_name](#output\_resource\_group\_name) | Name of the resource group containing the TFE resources. |
 | <a name="output_tfe_admin_console_url_pattern"></a> [tfe\_admin\_console\_url\_pattern](#output\_tfe\_admin\_console\_url\_pattern) | URL pattern to access the TFE Admin Console when it is enabled. |
 | <a name="output_tfe_database_host"></a> [tfe\_database\_host](#output\_tfe\_database\_host) | FQDN and port of PostgreSQL Flexible Server. |
 | <a name="output_tfe_database_name"></a> [tfe\_database\_name](#output\_tfe\_database\_name) | Name of PostgreSQL Flexible Server database. |
 | <a name="output_tfe_object_storage_azure_account_name"></a> [tfe\_object\_storage\_azure\_account\_name](#output\_tfe\_object\_storage\_azure\_account\_name) | Name of primary TFE Azure Storage Account. |
 | <a name="output_tfe_object_storage_azure_container_name"></a> [tfe\_object\_storage\_azure\_container\_name](#output\_tfe\_object\_storage\_azure\_container\_name) | Name of TFE Azure Storage Container. |
+| <a name="output_ubuntu_bastion_public_ip"></a> [ubuntu\_bastion\_public\_ip](#output\_ubuntu\_bastion\_public\_ip) | Public IP address of the Ubuntu bastion VM. Use this to open an RDP (xrdp) or SSH session from your Mac. |
 | <a name="output_url"></a> [url](#output\_url) | URL of TFE application based on `tfe_fqdn` input. |
+| <a name="output_vmss_name"></a> [vmss\_name](#output\_vmss\_name) | Name of the TFE Virtual Machine Scale Set. Used by the scripts to find the TFE VM. |
+| <a name="output_vnet_id"></a> [vnet\_id](#output\_vnet\_id) | ID of the Virtual Network that TFE is deployed in. |
 <!-- END_TF_DOCS -->
