@@ -9,6 +9,7 @@ Changes made in this repository, newest first. The entries from `v1.0.0` down ar
 
 ### Added
 * New outputs: `resource_group_name`, `vmss_name`, `load_balancer_ip`, `vnet_id`, `networking_resource_group_name` and `azure_bastion_name`.
+* `event_hub_ingestion.tf` and the `create_event_hub_log_analytics_ingestion` variable. A Data Collection Rule reads the Event Hub and writes `component_s` and `log_s` to the `tfe_fluent_bit_CL` table, so `dashboards/TFE.json` keeps working. Use it with `create_event_hub = true` and `create_log_analytics_workspace = true`. The ingestion identity gets the Azure Event Hubs Data Receiver role on the hub. **Known issue:** Azure rejects the Data Collection Rule on a `PerGB2018` workspace (`Event Hub data imports are only available with 'LACluster' and 'CapacityReservation' SKUs`), so leave it off unless the workspace is changed. See "Event Hub to Log Analytics" in the README.
 * `scripts/README.md`, which lists each script, when to run it and the usual order.
 * `docs/images/tfe-azure-deployment.svg`, a diagram of what this repo deploys.
 
