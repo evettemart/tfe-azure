@@ -60,7 +60,7 @@ locals {
   fluent_bit_custom_config = var.tfe_log_forwarding_enabled && var.log_fwd_destination_type == "custom" ? var.custom_fluent_bit_config : ""
 
   // Final rendered FluentBit config
-  fluent_bit_rendered_config = join("", [local.fluent_bit_log_analytics_config, local.fluent_bit_event_hub_config, local.fluent_bit_custom_config])
+  fluent_bit_rendered_config = join("\n\n", compact([local.fluent_bit_log_analytics_config, local.fluent_bit_event_hub_config, local.fluent_bit_custom_config]))
 }
 
 #------------------------------------------------------------------------------
