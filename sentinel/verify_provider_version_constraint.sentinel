@@ -7,11 +7,12 @@ import "strings"
 
 # Check if version constraint matches '~> <major>.<minor>' pattern
 is_valid_provider_version = func(version_constraints) {
-	if length(version_constraints) == 0 {
+	vc_list = version_constraints else []
+	if length(vc_list) == 0 {
 		return false
 	}
 	
-	for version_constraints as vc {
+	for vc_list as vc {
 		# Must specify pessimistic operator '~>'
 		if strings.has_prefix(strings.trim_space(vc), "~>") {
 			return true
@@ -22,7 +23,7 @@ is_valid_provider_version = func(version_constraints) {
 
 invalid_provider_constraints = []
 
-for tfconfig.provider_requirements as address, prov {
+for tfconfig.provider_requirements else {} as address, prov {
 	version_constraints = prov.version_constraints else []
 	if not is_valid_provider_version(version_constraints) {
 		append(invalid_provider_constraints, {

@@ -18,7 +18,7 @@ param prohibited_direct_resource_types default [
 disallowed_root_resources = []
 
 # Validate root module direct resources
-for tfconfig.resources as address, res {
+for tfconfig.resources else {} as address, res {
 	# Check resources declared directly in the root module (not inside a child module call)
 	if res.module_address == "" and res.mode == "managed" {
 		if res.type in prohibited_direct_resource_types {

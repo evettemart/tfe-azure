@@ -26,7 +26,7 @@ normalize_provider_source = func(source) {
 # Collect all provider requirements across modules
 invalid_providers = []
 
-for tfconfig.provider_requirements as address, prov {
+for tfconfig.provider_requirements else {} as address, prov {
 	normalized = normalize_provider_source(prov.source)
 	if normalized not in approved_providers and prov.source not in approved_providers {
 		append(invalid_providers, {

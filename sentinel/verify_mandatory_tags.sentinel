@@ -29,7 +29,7 @@ get_resource_tags = func(rc) {
 
 violating_resources = []
 
-for tfplan.resource_changes as address, rc {
+for tfplan.resource_changes else {} as address, rc {
 	# Only validate resources being created or updated
 	if rc.mode == "managed" and rc.change.actions contains "create" or rc.change.actions contains "update" {
 		tags = get_resource_tags(rc)

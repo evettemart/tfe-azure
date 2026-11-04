@@ -4,7 +4,8 @@
 import "tfconfig/v2" as tfconfig
 
 has_outputs = func() {
-	if length(tfconfig.outputs) > 0 {
+	outputs = tfconfig.outputs else {}
+	if length(outputs) > 0 {
 		return true
 	}
 	return false

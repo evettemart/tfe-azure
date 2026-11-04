@@ -9,7 +9,7 @@ param mandatory_module_pattern default "std_project_setting"
 param supported_csps default ["aws", "google", "azurerm"]
 
 has_mandatory_module = func() {
-	for tfconfig.module_calls as _, call {
+	for tfconfig.module_calls else {} as _, call {
 		source = call.source else ""
 		if source contains ("/" + mandatory_module_pattern + "/") {
 			for supported_csps as csp {

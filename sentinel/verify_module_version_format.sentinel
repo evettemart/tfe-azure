@@ -27,7 +27,7 @@ is_valid_module_version_format = func(vc) {
 
 invalid_module_version_formats = []
 
-for tfconfig.module_calls as address, call {
+for tfconfig.module_calls else {} as address, call {
 	# Check only remote modules that have declared a version constraint
 	if not strings.has_prefix(call.source, "./") and not strings.has_prefix(call.source, "../") {
 		version = call.version_constraint else ""
