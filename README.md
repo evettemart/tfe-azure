@@ -176,9 +176,9 @@ The password comes from the environment: `TF_VAR_ubuntu_bastion_admin_password` 
 
 ## Backing up the PostgreSQL database
 
-Take a backup before a TFE upgrade or a PostgreSQL major version upgrade (see [TFE and Database upgrades](docs/tfe-and-db-upgrades.md)). The names below are from `main/terraform.tfvars`: resource group `tfe-rg`, server `em-tfe-postgres-primary`, database `tfe`, login `tfeadmin`. Replace them with yours.
+Take a backup before a TFE upgrade or a PostgreSQL major version upgrade (see [PostgreSQL database upgrades](docs/database-upgrades.md) and [TFE version upgrades](docs/tfe-version-upgrades.md)). The names below are from `main/terraform.tfvars`: resource group `tfe-rg`, server `em-tfe-postgres-primary`, database `tfe`, login `tfeadmin`. Replace them with yours.
 
-**1. Stop work on TFE** so nothing writes during the backup (see the first steps of [TFE and Database upgrades](docs/tfe-and-db-upgrades.md)):
+**1. Stop work on TFE** so nothing writes during the backup (see [PostgreSQL database upgrades](docs/database-upgrades.md) or [TFE version upgrades](docs/tfe-version-upgrades.md)):
 
 ```bash
 tfectl node drain --all
@@ -244,7 +244,8 @@ A capacity reservation is a commitment tier with a minimum daily charge; check A
 ## Docs
 
 - [Deployment customizations](docs/deployment-customizations.md)
-- [TFE and PostgreSQL database upgrades](docs/tfe-and-db-upgrades.md)
+- [PostgreSQL database upgrades](docs/database-upgrades.md)
+- [TFE version upgrades](docs/tfe-version-upgrades.md)
 - [TFE TLS certificate rotation](docs/tfe-cert-rotation.md)
 - [TFE configuration settings](docs/tfe-config-settings.md)
 - [Azure GovCloud deployment](docs/govcloud-deployment.md)
