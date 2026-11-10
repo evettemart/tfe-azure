@@ -1,0 +1,15 @@
+resource_changes = {
+	"azurerm_resource_group.rg": {
+		"address": "azurerm_resource_group.rg",
+		"mode":    "managed",
+		"type":    "azurerm_resource_group",
+		"change": {
+			"actions": ["create"],
+			"after": {
+				"tags": {
+					"Environment": "sandbox",
+				},
+			},
+		},
+	},
+}

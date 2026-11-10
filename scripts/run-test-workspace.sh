@@ -29,16 +29,17 @@
 set -euo pipefail
 
 # ---- Configuration ----
-RESOURCE_GROUP="tfe-rg"
-NETWORKING_RG="tfe-networking-rg"
-BASTION_NAME="tfe-bastion"
-VMSS_NAME="em-tfe-vmss"
-VM_ADMIN="tfeadmin"
-TFE_HOSTNAME="tfe.azure.example.com"
+RESOURCE_GROUP="${RESOURCE_GROUP:-tfe-rg}"
+NETWORKING_RG="${NETWORKING_RG:-tfe-networking-rg}"
+BASTION_NAME="${BASTION_NAME:-tfe-bastion}"
+VMSS_NAME="${VMSS_NAME:-em-tfe-vmss}"
+VM_ADMIN="${VM_ADMIN:-tfeadmin}"
+TFE_HOSTNAME="${TFE_HOSTNAME:-tfe.azure.example.com}"
 TUNNEL_PORT="${TUNNEL_PORT:-2222}"
-WORKSPACE_NAME="tf-demo-workspace"
+WORKSPACE_NAME="${WORKSPACE_NAME:-tf-demo-workspace}"
 ACTION="${1:-apply}"
 LOCAL_WORKSPACE_DIR="$(cd "$(dirname "$0")/../test-workspace" && pwd)"
+VM_IP="${VM_IP:-${TFE_VM_IP:-}}"
 
 SSH_KEY="${SSH_KEY:?ERROR: SSH_KEY is not set. Run: export SSH_KEY=~/.ssh/<private-key>}"
 TFE_ORG="${TFE_ORG:?ERROR: TFE_ORG is not set. Run: export TFE_ORG=<your-org-name>}"
@@ -69,13 +70,23 @@ done
 
 # ---- Get VM private IP ----
 log "Looking up TFE VM private IP..."
-VM_IP=$(az vmss nic list \
-  --resource-group "$RESOURCE_GROUP" \
-  --vmss-name "$VMSS_NAME" \
-  --query "[0].ipConfigurations[0].privateIPAddress" \
-  --output tsv 2>/dev/null) || die "Failed to get VM IP. Is the VMSS running?"
+if [[ -z "$VM_IP" ]]; then
+  VM_IP=$(az vmss nic list \
+    --resource-group "$RESOURCE_GROUP" \
+    --vmss-name "$VMSS_NAME" \
+    --query "[0].ipConfigurations[0].privateIPAddress || [0].ipConfigurations[0].privateIpAddress" \
+    --output tsv 2>/dev/null || true)
+fi
 
-[[ -n "$VM_IP" ]] || die "No VM IP found. Is the VMSS running?"
+if [[ -z "$VM_IP" ]]; then
+  VM_IP=$(az network nic list-vmss-nics \
+    --resource-group "$RESOURCE_GROUP" \
+    --vmss-name "$VMSS_NAME" \
+    --query "[0].ipConfigurations[0].privateIPAddress || [0].ipConfigurations[0].privateIpAddress" \
+    --output tsv 2>/dev/null || true)
+fi
+
+[[ -n "$VM_IP" ]] || die "No VM IP found for VMSS '$VMSS_NAME' in RG '$RESOURCE_GROUP'. Check if the VMSS instance is running or set 'export VM_IP=<private-ip>'."
 log "VM IP: $VM_IP"
 
 # ---- Open Bastion tunnel ----

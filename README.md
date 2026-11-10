@@ -174,6 +174,49 @@ The password comes from the environment: `TF_VAR_ubuntu_bastion_admin_password` 
 - If the password is rejected over SSH or RDP, reset it with `az vm user update -g <resource-group> -n <vm-name> -u bastionadmin -p '<password>'`.
 - The setup maps `tfe_fqdn` to the load balancer IP in `/etc/hosts`. If the load balancer is not reachable from the bastion, set `ubuntu_bastion_tfe_hosts_ip` to the TFE VM private IP, and re-check it if the VM is replaced.
 
+## Backing up the PostgreSQL database
+
+Take a backup before a TFE upgrade or a PostgreSQL major version upgrade (see [PostgreSQL database upgrades](docs/database-upgrades.md) and [TFE version upgrades](docs/tfe-version-upgrades.md)). The names below are from `main/terraform.tfvars`: resource group `tfe-rg`, server `em-tfe-postgres-primary`, database `tfe`, login `tfeadmin`. Replace them with yours.
+
+**1. Stop work on TFE** so nothing writes during the backup (see [PostgreSQL database upgrades](docs/database-upgrades.md) or [TFE version upgrades](docs/tfe-version-upgrades.md)):
+
+```bash
+tfectl node drain --all
+```
+
+**2. Check the automatic backups.** Azure takes a full backup daily and keeps it for `postgres_backup_retention_days` (default 35).
+
+```bash
+az postgres flexible-server backup list -g tfe-rg -n em-tfe-postgres-primary -o table
+```
+
+**3. Create an on-demand backup** and confirm that it appears in the list:
+
+```bash
+az postgres flexible-server backup create -g tfe-rg -n em-tfe-postgres-primary \
+  --backup-name pre-upgrade-$(date +%Y%m%d)
+az postgres flexible-server backup list -g tfe-rg -n em-tfe-postgres-primary -o table
+```
+
+**4. Optional: also keep a SQL dump** outside Azure. The server has no public access, so run this from a machine inside the VNet, such as the TFE VM or the [Ubuntu bastion](#ubuntu-bastion). It needs `pg_dump` (the `postgresql-client` package), and the client version must be at least the server version.
+
+```bash
+export PGPASSWORD=$(az keyvault secret show --id https://<bootstrap-key-vault>.vault.azure.net/secrets/tfe-database-password \
+  --query value -o tsv)
+pg_dump -h em-tfe-postgres-primary.postgres.database.azure.com -U tfeadmin -d tfe \
+  -Fc -f tfe-$(date +%Y%m%d).dump
+unset PGPASSWORD
+```
+
+**Restoring.** A restore always creates a new server; it does not overwrite the existing one. Point-in-time restore:
+
+```bash
+az postgres flexible-server restore -g tfe-rg -n em-tfe-postgres-restored \
+  --source-server em-tfe-postgres-primary --restore-time "2026-10-27T07:00:00Z"
+```
+
+A server with private access needs its network and private DNS settings supplied too (`az postgres flexible-server restore -h` lists the options). Then point TFE at the restored server, or load the dump into a new database with `pg_restore`. This procedure has not been tested here.
+
 ## Event Hub to Log Analytics
 
 `create_event_hub_log_analytics_ingestion = true` adds a Data Collection Rule that reads the Event Hub and writes to the `tfe_fluent_bit_CL` table ([`event_hub_ingestion.tf`](event_hub_ingestion.tf)). With `log_fwd_destination_type = "both"`, Fluent Bit sends to Log Analytics directly and to the Event Hub. The dashboard reads the direct path. With the rule off, nothing reads the Event Hub, so it only holds the events for other consumers.
@@ -201,6 +244,7 @@ A capacity reservation is a commitment tier with a minimum daily charge; check A
 ## Docs
 
 - [Deployment customizations](docs/deployment-customizations.md)
+- [PostgreSQL database upgrades](docs/database-upgrades.md)
 - [TFE version upgrades](docs/tfe-version-upgrades.md)
 - [TFE TLS certificate rotation](docs/tfe-cert-rotation.md)
 - [TFE configuration settings](docs/tfe-config-settings.md)

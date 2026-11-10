@@ -19,15 +19,16 @@
 set -euo pipefail
 
 # ---- Configuration — adjust if your values differ ----
-RESOURCE_GROUP="tfe-rg"
-NETWORKING_RG="tfe-networking-rg"
-BASTION_NAME="tfe-bastion"
-VMSS_NAME="em-tfe-vmss"
-VM_ADMIN="tfeadmin"
+RESOURCE_GROUP="${RESOURCE_GROUP:-tfe-rg}"
+NETWORKING_RG="${NETWORKING_RG:-tfe-networking-rg}"
+BASTION_NAME="${BASTION_NAME:-tfe-bastion}"
+VMSS_NAME="${VMSS_NAME:-em-tfe-vmss}"
+VM_ADMIN="${VM_ADMIN:-tfeadmin}"
 SSH_KEY="${SSH_KEY:?ERROR: SSH_KEY environment variable is not set. Export it before running: export SSH_KEY=~/.ssh/<private-key>}"
 TUNNEL_PORT="${TUNNEL_PORT:-2222}"
 TERRAFORM_DIR="$(cd "$(dirname "$0")/../main" && pwd)"
 SCRIPT_TMP="/tmp/tfe-init.sh"
+VM_IP="${VM_IP:-${TFE_VM_IP:-}}"
 
 # ---- Colours ----
 GREEN='\033[0;32m'
@@ -48,13 +49,23 @@ done
 
 # ---- Get VM private IP ----
 log "Looking up TFE VM private IP..."
-VM_IP=$(az vmss nic list \
-  --resource-group "$RESOURCE_GROUP" \
-  --vmss-name "$VMSS_NAME" \
-  --query "[0].ipConfigurations[0].privateIPAddress" \
-  --output tsv 2>/dev/null) || die "Failed to get VM IP. Is the VMSS running?"
+if [[ -z "$VM_IP" ]]; then
+  VM_IP=$(az vmss nic list \
+    --resource-group "$RESOURCE_GROUP" \
+    --vmss-name "$VMSS_NAME" \
+    --query "[0].ipConfigurations[0].privateIPAddress || [0].ipConfigurations[0].privateIpAddress" \
+    --output tsv 2>/dev/null || true)
+fi
 
-[[ -n "$VM_IP" ]] || die "No VM IP found. Is the VMSS running?"
+if [[ -z "$VM_IP" ]]; then
+  VM_IP=$(az network nic list-vmss-nics \
+    --resource-group "$RESOURCE_GROUP" \
+    --vmss-name "$VMSS_NAME" \
+    --query "[0].ipConfigurations[0].privateIPAddress || [0].ipConfigurations[0].privateIpAddress" \
+    --output tsv 2>/dev/null || true)
+fi
+
+[[ -n "$VM_IP" ]] || die "No VM IP found for VMSS '$VMSS_NAME' in RG '$RESOURCE_GROUP'. Check if the VMSS instance is running or set 'export VM_IP=<private-ip>'."
 log "VM IP: $VM_IP"
 
 # ---- Extract startup script from Terraform state ----

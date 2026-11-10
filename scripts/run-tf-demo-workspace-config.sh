@@ -116,11 +116,29 @@ PROXY_STARTED=1
 
 # ---- Verify TFE is reachable through the proxy ----
 log "Checking TFE through the proxy..."
-HEALTH=$(curl -sk --max-time 20 --socks5-hostname "127.0.0.1:$PROXY_PORT" \
-  "https://$TFE_HOSTNAME/_health_check" || true)
-[[ "$HEALTH" == "OK" ]] \
-  || die "TFE did not answer 'OK' on /_health_check through the bastion (got: '${HEALTH:-nothing}'). Check that the bastion has the hosts entry for $TFE_HOSTNAME (scripts/setup-ubuntu-bastion.sh)."
-log "TFE is reachable."
+HEALTH_OK=0
+HEALTH_RESP=""
+
+# Try modern readiness endpoint (TFE 2.x and >= 1.2.1)
+HEALTH_RESP=$(curl -sk --max-time 15 --socks5-hostname "127.0.0.1:$PROXY_PORT" \
+  "https://$TFE_HOSTNAME/api/v1/health/readiness" || true)
+
+if [[ "$HEALTH_RESP" == *"OK"* || "$HEALTH_RESP" == *"status"* ]]; then
+  HEALTH_OK=1
+else
+  # Fallback to legacy endpoint (TFE 1.0.1 and older)
+  LEGACY_RESP=$(curl -sk --max-time 15 --socks5-hostname "127.0.0.1:$PROXY_PORT" \
+    "https://$TFE_HOSTNAME/_health_check" || true)
+  if [[ "$LEGACY_RESP" == "OK" ]]; then
+    HEALTH_OK=1
+    HEALTH_RESP="$LEGACY_RESP"
+  fi
+fi
+
+if [[ "$HEALTH_OK" -ne 1 ]]; then
+  die "TFE did not answer healthy on /api/v1/health/readiness or /_health_check through the bastion (got: '${HEALTH_RESP:-nothing}'). Check that the bastion has the hosts entry for $TFE_HOSTNAME (scripts/setup-ubuntu-bastion.sh)."
+fi
+log "TFE is reachable and healthy."
 
 # ---- Run Terraform ----
 # Terraform (Go) honours HTTPS_PROXY but ignores ALL_PROXY. socks5h makes the

@@ -61,13 +61,17 @@ resource "azurerm_lb_backend_address_pool" "tfe_servers" {
 resource "azurerm_lb_probe" "tfe" {
   count = var.create_lb ? 1 : 0
 
-  name                = "tfe-app-lb-probe"
+  name                = "tfe-app-lb-probe-${substr(sha256(local.tfe_health_check_path), 0, 8)}"
   loadbalancer_id     = azurerm_lb.tfe[0].id
   protocol            = "Https"
   port                = 443
   request_path        = local.tfe_health_check_path
   interval_in_seconds = 15
   number_of_probes    = 5
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "azurerm_lb_rule" "tfe" {
