@@ -21,9 +21,3 @@ Helper scripts for deploying and testing TFE on Azure. Run them from the repo ro
 5. Create the initial admin user and organisation (see the main README)
 6. `run-tf-demo-workspace-config.sh apply`
 7. `run-test-workspace.sh` (optional)
-
-## Notes
-
-- **Hard-coded names.** `bootstrap.sh`, `cleanup.sh`, `deploy-tfe.sh` and `run-test-workspace.sh` hard-code names such as `tfe-rg`, `tfe-networking-rg`, `tfe-bastion`, `em-tfe-vmss` and `em-bootstrap-kv`. If you change the resource group or `friendly_name_prefix`, edit them to match.
-- **Environment variables.** The variables the scripts read (`SSH_KEY`, `TFE_TOKEN`, `TFE_ORG`, `TUNNEL_PORT` and others) are listed in [`.env.local.example`](../.env.local.example).
-- **Possibly not needed.** `check-health-assessment-requirements.sh` is not called by any other script, doc or workflow. Delete it if you do not use health assessments.
