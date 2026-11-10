@@ -9,7 +9,9 @@ param mandatory_module_pattern default "std_project_setting"
 param supported_csps default ["aws", "google", "azurerm"]
 
 has_mandatory_module = func() {
+	# 'else {}' is a fallback used when module_calls is undefined, so the loop does not error
 	for tfconfig.module_calls else {} as _, call {
+		# 'else ""' is a fallback used when call.source is undefined
 		source = call.source else ""
 		if source contains ("/" + mandatory_module_pattern + "/") {
 			for supported_csps as csp {

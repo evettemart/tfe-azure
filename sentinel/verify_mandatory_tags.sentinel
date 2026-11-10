@@ -14,6 +14,7 @@ param mandatory_tags default [
 tag_attribute_names = ["tags", "labels", "tags_all"]
 
 get_resource_tags = func(rc) {
+	# 'else {}' is a fallback used when change.after is undefined
 	values = rc.change.after else {}
 	if values is null {
 		return {}
@@ -29,6 +30,7 @@ get_resource_tags = func(rc) {
 
 violating_resources = []
 
+# 'else {}' is a fallback used when resource_changes is undefined, so the loop does not error
 for tfplan.resource_changes else {} as address, rc {
 	# Only validate resources being created or updated
 	if rc.mode == "managed" and rc.change.actions contains "create" or rc.change.actions contains "update" {

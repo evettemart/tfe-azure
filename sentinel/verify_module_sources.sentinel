@@ -25,6 +25,7 @@ is_approved_source = func(source) {
 
 invalid_module_sources = []
 
+# 'else {}' is a fallback used when module_calls is undefined, so the loop does not error
 for tfconfig.module_calls else {} as address, call {
 	if not is_approved_source(call.source) {
 		append(invalid_module_sources, {

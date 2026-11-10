@@ -4,6 +4,7 @@
 import "tfconfig/v2" as tfconfig
 
 has_outputs = func() {
+	# 'else {}' is a fallback used when tfconfig.outputs is undefined
 	outputs = tfconfig.outputs else {}
 	if length(outputs) > 0 {
 		return true

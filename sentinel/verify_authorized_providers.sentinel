@@ -26,6 +26,7 @@ normalize_provider_source = func(source) {
 # Collect all provider requirements across modules
 invalid_providers = []
 
+# 'else {}' is a fallback used when provider_requirements is undefined, so the loop does not error
 for tfconfig.provider_requirements else {} as address, prov {
 	normalized = normalize_provider_source(prov.source)
 	if normalized not in approved_providers and prov.source not in approved_providers {
