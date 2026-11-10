@@ -59,7 +59,7 @@ az vmss scale \
 ```
 *(Alternatively, set `vmss_instance_count = 0` in `main/terraform.tfvars` and run `terraform apply`).*
 
-#### Option 2: Stop TFE via Docker Compose (`docker compose down`)
+#### Option 2: Stop TFE via Docker Compose (docker compose down)
 If keeping the VM instances running, stop all TFE application containers completely:
 
 ```bash
@@ -85,8 +85,8 @@ sudo docker compose --file /etc/tfe/docker-compose.yaml exec tfe bash -l -c "tfe
 
 Run Azure's built-in pre-upgrade validation before taking the backup. It checks the server for issues that would block or break the major version upgrade (for example, unsupported extensions or incompatible settings) without changing anything.
 
-1. In the [Azure Portal](https://portal.azure.com), open your **Azure Database for PostgreSQL flexible server** (e.g. `em-tfe-postgres-primary`).
-2. Go to **Overview** (or **Settings → Compute + storage**) and select **Upgrade**.
+1. In the Azure Portal, open your **Azure Database for PostgreSQL flexible server** (e.g. `em-tfe-postgres-primary`).
+2. Click **Upgrade**.
 3. Choose the target major version (e.g. `18`) and select **Validate** (pre-upgrade validation). Do **not** select **Upgrade** yet.
 4. Review the result. Resolve every reported error (and review warnings) before continuing.
 
@@ -126,19 +126,19 @@ Capture both an Azure snapshot backup and an offline SQL dump. Replace resource 
 
 1. **Trigger the upgrade** using one of the following options:
 
-   **Option A: Azure CLI**
+   **Option A: Azure Portal (GUI)**
+   1. In the [Azure Portal](https://portal.azure.com), open your **Azure Database for PostgreSQL flexible server** (e.g. `em-tfe-postgres-primary`).
+   2. Go to **Overview** and select **Upgrade** (or **Settings → Compute + storage**, depending on the portal layout).
+   3. Select the target major version (e.g. `18`).
+   4. Confirm the prompt and select **Upgrade** to start.
+
+   **Option B: Azure CLI**
    ```bash
    az postgres flexible-server upgrade \
      --resource-group tfe-rg \
      --name em-tfe-postgres-primary \
      --version 18
    ```
-
-   **Option B: Azure Portal (GUI)**
-   1. In the [Azure Portal](https://portal.azure.com), open your **Azure Database for PostgreSQL flexible server** (e.g. `em-tfe-postgres-primary`).
-   2. Go to **Overview** and select **Upgrade** (or **Settings → Compute + storage**, depending on the portal layout).
-   3. Select the target major version (e.g. `18`).
-   4. Confirm the prompt and select **Upgrade** to start.
 
 2. **Monitor Server State** (CLI, or the server's **Overview** page in the portal):
    ```bash
@@ -180,6 +180,10 @@ terraform plan
 terraform apply
 ```
 
+> **Note:** Terraform may show that the database is being upgraded. This is expected: the upgrade has already been performed in Step 4, so applying only updates the Terraform state to reflect the new database version.
+>
+> ⚠️ **Check the plan before applying.** Confirm that the database is **not** being destroyed and recreated (shown as `-/+` or "must be replaced"). The change must only be an **update in-place** (`~`). If the plan shows the database being replaced, **do not apply**, and investigate first.
+
 ---
 
 ### Step 7: Confirm TFE Compatibility and Restart / Resume TFE
@@ -217,9 +221,24 @@ Verify TFE by running a plan and apply, and verify the logs.
 
 ## Rollback & Recovery Plan
 
+> ⚠️ **This rollback plan must be fully tested** in a Development / Sandbox environment before it is relied on in Production.
+
 If issues occur after upgrading the database:
 
-1. **Point-in-Time Restore to a New Server:**
+1. **Restore from a Backup via the Azure Portal (GUI):**
+   Azure restores a flexible server to a **new server**. It does not overwrite the existing one.
+   1. In the Azure Portal, open your **Azure Database for PostgreSQL flexible server** (e.g. `em-tfe-postgres-primary`).
+   2. Click **Restore**.
+   3. Select the restore point: the **latest restore point**, or a **specific restore point** taken before the upgrade (for example, the time of the Step 3 backup).
+   4. Enter a name for the new server (e.g. `em-tfe-postgres-restored`).
+   5. Confirm the networking settings (VNet / subnet and private DNS zone) match the original server, so TFE can reach the restored server.
+   6. Click **Review + create**, then **Create**, and wait for the new server to show as `Ready`.
+   7. Verify the restored server's version and that the `citext`, `hstore` and `uuid-ossp` extensions are present.
+   8. Point TFE at the restored server (update the database host in the TFE / Terraform configuration), then restart TFE and verify with a plan and apply.
+
+   > **Note:** The exact portal labels may vary as the feature evolves. Terraform state will no longer match the restored server, so review the Terraform plan carefully before applying.
+
+2. **Point-in-Time Restore to a New Server (CLI):**
    ```bash
    az postgres flexible-server restore \
      --resource-group tfe-rg \
@@ -227,7 +246,7 @@ If issues occur after upgrading the database:
      --source-server em-tfe-postgres-primary \
      --restore-time "<restore_timestamp_iso8601>"
    ```
-2. **Restore from Offline Dump:**
+3. **Restore from Offline Dump:**
    Deploy a fresh server on the previous version and restore using `pg_restore`:
    ```bash
    pg_restore -h <restored-server-fqdn> -U tfeadmin -d tfe -v "tfe-pre-upgrade-<date>.dump"
